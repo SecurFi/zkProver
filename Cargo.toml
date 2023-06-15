@@ -1,0 +1,17 @@
+[workspace]
+members = [
+    "chains/evm",
+    "cli",
+    "bridge",
+    "zk-methods",
+]
+
+[profile.release]
+# Optimize for binary size, but keep loop vectorization
+opt-level = "s"
+# Performance optimizations
+lto = "fat"
+debug = 0
+strip = true
+panic = "abort"
+codegen-units = 1

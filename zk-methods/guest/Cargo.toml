@@ -1,0 +1,13 @@
+[package]
+name = "methods-guest"
+version = "0.12.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+bridge = { path = "../../bridge",  default-features = false}
+risc0-zkvm = { version="0.15.2", default-features = false, features = [ "std" ] }
+
+[patch.crates-io]
+radium = { git = 'https://github.com/ferrilab/radium.git', rev = "723bed5" }
