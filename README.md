@@ -1,13 +1,9 @@
 # zkProver
 
-## requirements
+## Requirements
 - [Rust](https://www.rust-lang.org/tools/install)
 
-## Documentation
-[Documentation for 0xHacked](https://docs.0xHacked.com)
-
 ## Usage
-
 ### generate zk proof
 ```bash
 # For MacOS with Metal support
@@ -22,3 +18,9 @@ cargo run -r -p zkProver -- evm -r <RPC_URL> -b <BLOCK_NUMBER> -d <DEAL> <path>:
 ```
 
 We highly recommend you start hacking from [PoC demos](https://github.com/0xHackedLabs/PoC) after installing zkProver.
+
+## Documentation
+[Documentation for 0xHacked](https://docs.0xHacked.com)
+
+## Acknowledgements
+Thanks to the contributions of [foundry](https://github.com/foundry-rs/foundry), [revm](https://github.com/bluealloy/revm), [reth](https://github.com/paradigmxyz/reth), [ethers-rs](https://github.com/gakonst/ethers-rs) and [risc0](https://github.com/risc0/risc0) to crypto. We're grateful for these awesome projects.
