@@ -23,4 +23,4 @@ We highly recommend you start hacking from [PoC demos](https://github.com/0xHack
 [Documentation for 0xHacked](https://docs.0xHacked.com)
 
 ## Acknowledgements
-Thanks to the contributions of [foundry](https://github.com/foundry-rs/foundry), [revm](https://github.com/bluealloy/revm), [reth](https://github.com/paradigmxyz/reth), [ethers-rs](https://github.com/gakonst/ethers-rs) and [risc0](https://github.com/risc0/risc0) to crypto. We're grateful for these awesome projects.
+Thanks to the contributions of [foundry](https://github.com/foundry-rs/foundry), [revm](https://github.com/bluealloy/revm), [reth](https://github.com/paradigmxyz/reth), [ethers-rs](https://github.com/gakonst/ethers-rs) and [RISC Zero](https://github.com/risc0/risc0) to crypto. We're grateful for these awesome projects.
