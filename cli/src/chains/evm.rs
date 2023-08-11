@@ -1,7 +1,7 @@
 use std::{time::Instant};
 
 use crate::{proof::Proof, VERSION_MESSAGE};
-use bridge::{Env, ZkDb};
+use bridge::{Env, ZkDb, EvmInput};
 use chains_evm::{
     compiler::compile_contract,
     opts::EvmOpts,
@@ -146,10 +146,12 @@ impl EvmArgs {
                 hex::encode(evm_id)
             );
             let start = Instant::now();
-
+            let input = EvmInput {
+                env: env,
+                db: zkdb,
+            };
             let env = ExecutorEnv::builder()
-                .add_input(&to_vec(&env).unwrap())
-                .add_input(&to_vec(&zkdb).unwrap())
+                .add_input(&to_vec(&input).unwrap())
                 .session_limit(1024 * 1024 * 1024)
                 .build();
 

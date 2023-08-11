@@ -96,6 +96,12 @@ impl DatabaseRef for ZkDb {
 }
 
 #[derive(Deserialize, Serialize)]
+pub struct EvmInput {
+    pub db: ZkDb,
+    pub env: Env,
+}
+
+#[derive(Deserialize, Serialize)]
 pub struct EvmResult {
     pub env: Env,
     pub db: ZkDb,

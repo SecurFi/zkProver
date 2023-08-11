@@ -1,17 +1,16 @@
 #![no_main]
 #![allow(unused_imports)]
 
-use bridge::{ZkDb, EVM, Env, EvmResult, ExecutionResult, TransactTo};
+use bridge::{ZkDb, EVM, Env, EvmInput, EvmResult, ExecutionResult, TransactTo};
 use risc0_zkvm::guest::env;
 
 risc0_zkvm::guest::entry!(main);
 
 pub fn main() {
-    let env: Env = env::read();
-    let db: ZkDb = env::read();
+    let input: EvmInput = env::read();
     let mut evm = EVM::new();
-    evm.database(db);
-    evm.env = env;
+    evm.database(input.db);
+    evm.env = input.env;
     let res = evm.transact().unwrap();
     if let ExecutionResult::Success{gas_used, ..} = res.result {
         let contract_address =  match evm.env.tx.transact_to {
