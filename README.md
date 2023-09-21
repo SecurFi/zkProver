@@ -30,14 +30,14 @@ rustup-init
 ### generate zk proof
 ```bash
 # For MacOS with Metal support
-cargo run -r -p zkProver -F metal -- evm -r <RPC_URL> -b <BLOCK_NUMBER> -d <DEAL> <path>:<contractname>
+cargo run -r -p zkProver -F metal -- evm -r <RPC_URL> -b <BLOCK_NUMBER> -d <DEAL> <path>
 
 # For Linux/Windows with CUDA support
-cargo run -r -p zkProver -F cuda -- evm -r <RPC_URL> -b <BLOCK_NUMBER> -d <DEAL> <path>:<contractname>
+cargo run -r -p zkProver -F cuda -- evm -r <RPC_URL> -b <BLOCK_NUMBER> -d <DEAL> <path>
 
 # For CPU-only Linux/Windows/MacOS
 # Not recommended, the generation might be very slow.
-cargo run -r -p zkProver -- evm -r <RPC_URL> -b <BLOCK_NUMBER> -d <DEAL> <path>:<contractname>
+cargo run -r -p zkProver -- evm -r <RPC_URL> -b <BLOCK_NUMBER> -d <DEAL> <path>
 ```
 
 We highly recommend you start hacking from [PoC demos](https://github.com/0xHackedLabs/PoC) after installing zkProver.
