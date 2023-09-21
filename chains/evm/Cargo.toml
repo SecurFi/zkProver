@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 bytes = "1.4.0"
-ethers = {version = "2.0.7", features=["ethers-solc"]}
+ethers = {version = "2.0.7", features=["rustls", "ethers-solc"]}
 eyre = "0.6.8"
 futures = "0.3.28"
 hashbrown = { version = "0.13.2", features = ["serde"] }

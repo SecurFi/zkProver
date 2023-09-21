@@ -113,7 +113,7 @@ impl CheatCodesInspector {
                     ethers::abi::encode(&[Token::Array(vec![]), Token::Array(vec![])]).into()
                 }
             }
-            _ => return Err("invalid cheatcode".into())
+            // _ => return Err("invalid cheatcode".into())
         };
         Ok(res)
     }

@@ -1,7 +1,6 @@
-use std::{time::Instant};
-
-use crate::{proof::Proof, VERSION_MESSAGE};
-use bridge::{Env, ZkDb, EvmInput};
+use std::time::Instant;
+use crate::proof::Proof;
+use bridge::{Env, ZkDb};
 use chains_evm::{
     compiler::compile_contract,
     opts::EvmOpts,
@@ -13,7 +12,7 @@ use clap::Parser;
 use clio::Output;
 use ethers_core::types::{Address, U256};
 use ethers_solc::{info::ContractInfo, utils::canonicalized, Artifact};
-use eyre::Result;
+use eyre::{Result, bail};
 use risc0_zkvm::{serde::to_vec, Executor, ExecutorEnv, FileSegmentRef};
 
 use tempfile::tempdir;
@@ -23,8 +22,8 @@ use zk_methods::{EVM_ELF, EVM_ID};
 
 #[derive(Parser, Debug)] // requires `derive` feature
 pub struct EvmArgs {
-    /// The contract identifier in the form `<path>:<contractname>`.
-    contract: ContractInfo,
+    /// The Exploit contract
+    contract: String,
 
     #[clap(short, long)]
     rpc_url: String,
@@ -47,12 +46,11 @@ pub struct EvmArgs {
 impl EvmArgs {
     /// Executes the `evm` subcommand.
     pub async fn run(mut self) -> Result<()> {
-        if let Some(ref mut path) = self.contract.path {
-            *path = canonicalized(path.to_string())
-                .to_string_lossy()
-                .to_string();
-        }
-        let contract = compile_contract(&self.contract).unwrap();
+        let path = canonicalized(self.contract).to_string_lossy().to_string();
+        let contract_info = ContractInfo {
+            path: Some(path), name: "Exploit".to_string()
+        };
+        let contract = compile_contract(&contract_info)?;
         let abi = contract.get_abi().unwrap().to_owned();
         let mut evm_opts = EvmOpts::default();
         evm_opts.fork_url = Some(self.rpc_url.clone());
@@ -112,8 +110,7 @@ impl EvmArgs {
         db.flush_cache();
         
         if !result.success {
-            println!("execution failed, reason: {:?}", result.reason);
-            return Ok(());
+            bail!("execution failed, {:?}", result.reason);
         }
 
         println!("tx run success, gas used: {:?}", result.gas_used);
@@ -138,7 +135,7 @@ impl EvmArgs {
             return Ok(());
         }
 
-        let evm_id: Vec<u8> = EVM_ID.iter().flat_map(|x| x.to_be_bytes()).collect();
+        let evm_id: Vec<u8> = EVM_ID.iter().flat_map(|x| x.to_le_bytes()).collect();
         #[cfg(feature = "prover")]
         {
             println!(
@@ -146,16 +143,15 @@ impl EvmArgs {
                 hex::encode(evm_id)
             );
             let start = Instant::now();
-            let input = EvmInput {
-                env: env,
-                db: zkdb,
-            };
-            let env = ExecutorEnv::builder()
-                .add_input(&to_vec(&input).unwrap())
-                .session_limit(1024 * 1024 * 1024)
-                .build();
-
-            let mut exec = Executor::from_elf(env, EVM_ELF).unwrap();
+            
+            let zk_env = ExecutorEnv::builder()
+                .add_input(&to_vec(&env).unwrap())
+                .add_input(&to_vec(&zkdb).unwrap())
+                .session_limit(Some(1024 * 1024 * 1024))
+                .build()
+                .unwrap();
+            
+            let mut exec = Executor::from_elf(zk_env, EVM_ELF).unwrap();
 
             let segment_dir = tempdir().unwrap();
             let session = exec
@@ -172,11 +168,11 @@ impl EvmArgs {
             receipt.verify(EVM_ID)?;
 
             let proof = Proof {
+                version: env!("CARGO_PKG_VERSION").to_string(),
+                image_id: EVM_ID,
                 chain: "ethereum".to_string(),
                 raw_metadata: contract.raw_metadata.unwrap(),
-                version: VERSION_MESSAGE.to_string(),
                 deals: deal_records,
-                image_id: EVM_ID,
                 receipt,
             };
             proof.save(&mut self.output).unwrap();

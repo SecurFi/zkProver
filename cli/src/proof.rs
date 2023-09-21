@@ -1,13 +1,6 @@
-use std::{
-    path::PathBuf,
-    fs::{File},
-    io::{BufReader,}
-};
+use std::io::{Read, Write};
 use chains_evm::setup::DealRecord;
-use clio::Output;
-use risc0_zkvm::{
-    SessionReceipt,
-};
+use risc0_zkvm::Receipt;
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -16,22 +9,19 @@ pub struct Proof {
     pub image_id: [u32; 8],
     pub chain: String,
     pub raw_metadata: String,
-    pub receipt: SessionReceipt,
+    pub receipt: Receipt,
     pub deals: Vec<DealRecord>,
 }
 
 
 
 impl Proof {
-    pub fn load(path: impl Into<PathBuf>) -> eyre::Result<Self> {
-        let path = path.into();
-        let file = File::open(path)?;
-        let file = BufReader::new(file);
-        let data = bincode::deserialize_from(file)?;
+    pub fn load<R: Read>(input: R) -> eyre::Result<Self> {
+        let data = bincode::deserialize_from(input)?;
         Ok(data)
     }
 
-    pub fn save(&self, output: &mut Output) -> eyre::Result<()> {
+    pub fn save<W: Write>(&self, output: W) -> eyre::Result<()> {
         bincode::serialize_into(output, self)?;
         Ok(())
     }

@@ -1,6 +1,6 @@
 extern crate core;
 
-use std::{fs, io::Write};
+use std::{fs, io::Write, env};
 
 use ethers_solc::{Project, ProjectPathsConfig};
 

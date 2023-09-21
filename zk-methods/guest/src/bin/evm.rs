@@ -7,10 +7,11 @@ use risc0_zkvm::guest::env;
 risc0_zkvm::guest::entry!(main);
 
 pub fn main() {
-    let input: EvmInput = env::read();
+    let env: Env = env::read();
+    let db: ZkDb = env::read();
     let mut evm = EVM::new();
-    evm.database(input.db);
-    evm.env = input.env;
+    evm.database(db);
+    evm.env = env;
     let res = evm.transact().unwrap();
     if let ExecutionResult::Success{gas_used, ..} = res.result {
         let contract_address =  match evm.env.tx.transact_to {
