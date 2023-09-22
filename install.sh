@@ -54,6 +54,10 @@ say() {
   printf "0xhacked: %s\n" "$1"
 }
 
+warn() {
+  say "warning: ${1}" >&2
+}
+
 err() {
   say "$1" >&2
   exit 1
