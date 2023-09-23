@@ -3,12 +3,13 @@
 ## Installation
 ### Prerequisites
 
-> Currentlly, we support Linux and MacOS with Apple silicon.
-> If you're using MacOS, please make sure you have installed Xcode, `xcode-select --install` and run `xcrun metal` successfully.
+Currently, we support Linux and MacOS with Apple silicon.
 
 ``` bash
 curl -L https://install.0xhacked.com | bash
 ```
+
+> If you're using MacOS, please make sure you have installed Xcode, `xcode-select --install` and run `xcrun metal` successfully.
 
 If you encounter any errors, please contact me via [Telegram](https://t.me/dimitrysc). Also, you can generate the proof of exploit via [our online tool](https://www.0xhacked.com/tool).
 
