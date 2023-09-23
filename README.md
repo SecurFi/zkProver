@@ -1,31 +1,46 @@
 # zkProver
 
-## Requirements
+## Installation
+### Prerequisites
 
-#### Ubuntu
-- [Rust](https://www.rust-lang.org/tools/install)
-```bash
-sudo curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-- build tools
-```bash
-sudo apt install -y build-essential pkg-config libssl-dev
-```
-- cuda[optional] [install guide](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html)
+> Currentlly, we support Linux and MacOS with Apple silicon.
+> If you're using MacOS, please make sure you have installed Xcode, `xcode-select --install` and run `xcrun metal` successfully.
 
-### Centos
-- Developments Tools
-```bash
-sudo yum groupinstall 'Development Tools'
+``` bash
+curl -L https://install.0xhacked.com | bash
 ```
-- cuda[optional] [install guide](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html)
 
-#### Mac
-- [Rust](https://www.rust-lang.org/tools/install)
-```bash
-brew install rustup-init
-rustup-init
-```
+If you encounter any errors, please contact me via [Telegram](https://t.me/dimitrysc). Also, you can generate the proof of exploit via [our online tool](https://www.0xhacked.com/tool).
+
+## Building from source
+### Requirements
+
+* Ubuntu
+
+  - [Rust](https://www.rust-lang.org/tools/install)
+   ```bash
+   sudo curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   ```
+  - build tools
+   ```bash
+   sudo apt install -y build-essential pkg-config libssl-dev
+   ```
+  - cuda[optional] [install guide](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html)
+
+* Centos
+  - Developments Tools
+  ```bash
+  sudo yum groupinstall 'Development Tools'
+  ```
+  - cuda[optional] [install guide](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html)
+
+* Mac
+  - [Rust](https://www.rust-lang.org/tools/install)
+  ```bash
+  brew install rustup-init
+  rustup-init
+  ```
+
 ## Usage
 ### generate zk proof
 ```bash
