@@ -1,17 +1,18 @@
 # zkProver
 
-## Installation
-### Prerequisites
+Besides generating the proof of exploit using [our online tool](https://www.0xhacked.com/tool), you can also do it locally with zkProver.
 
-Currently, we support Linux and MacOS with Apple silicon.
+## Installation
+
+Currently, zkProver supports **Linux** and **MacOS with Apple Silicon**.
 
 ``` bash
-curl -L https://install.0xhacked.com | bash
+curl -L https://install.0xHacked.com | bash
 ```
 
 > If you're using MacOS, please make sure you have installed Xcode, `xcode-select --install` and run `xcrun metal` successfully.
 
-If you encounter any errors, please contact me via [Telegram](https://t.me/dimitrysc). Also, you can generate the proof of exploit via [our online tool](https://www.0xhacked.com/tool).
+If you encounter any errors, please contact me via [Telegram](https://t.me/dimitrysc).
 
 ## Building from source
 ### Requirements
