@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::io::{Read, Write};
 use chains_evm::setup::DealRecord;
 use risc0_zkvm::Receipt;

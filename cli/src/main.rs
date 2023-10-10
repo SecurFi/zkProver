@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 use std::future::Future;
 use std::error::Error;
 use clap::{Parser, Subcommand};

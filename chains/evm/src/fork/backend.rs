@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Smart caching and deduplication of requests when using a forking provider
 use crate::{
     error::{DatabaseError, DatabaseResult},
