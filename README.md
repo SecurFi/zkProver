@@ -12,7 +12,7 @@ curl -L https://install.0xHacked.com | bash
 
 > If you're using MacOS, please make sure you have installed Xcode, `xcode-select --install` and run `xcrun metal` successfully.
 
-If you encounter any errors, please contact me via [Telegram](https://t.me/dimitrysc).
+If you encounter any errors, please contact me via [Telegram](https://t.me/Real0xHacked).
 
 ## Building from source
 ### Requirements
