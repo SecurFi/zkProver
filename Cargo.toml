@@ -3,7 +3,7 @@ members = [
     "chains/evm",
     "cli",
     "bridge",
-    "zk-methods",
+    "guests",
 ]
 
 [workspace.package]

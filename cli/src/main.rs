@@ -7,6 +7,8 @@ use eyre::EyreHandler;
 mod chains;
 use chains::evm::EvmArgs;
 mod proof;
+mod snark;
+use snark::SnarkArgs;
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about, long_about=None)]
@@ -19,6 +21,8 @@ struct Cli {
 enum Commands {
     /// Run the EVM proof generator
     Evm(EvmArgs),
+    /// SNARK tools
+    Snark(SnarkArgs),
 }
 
 #[allow(unused)]
@@ -70,5 +74,6 @@ fn main() -> eyre::Result<()> {
     let args = Cli::parse();
     match args.command {
         Commands::Evm(args) => block_on(args.run()),
+        Commands::Snark(args) => args.run(),
     }
 }

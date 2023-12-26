@@ -7,22 +7,30 @@ edition = "2021"
 
 [dependencies]
 bytes = "1.4.0"
-ethers = {version = "2.0.7", features=["rustls", "ethers-solc"]}
+ethers-core = { version = "2.0" }
+ethers-providers = { version = "2.0"}
 eyre = "0.6.8"
 futures = "0.3.28"
-hashbrown = { version = "0.13.2", features = ["serde"] }
+hashbrown = { version = "0.14", features = ["inline-more"] }
 hex = "0.4.3"
 itertools = "0.10.5"
 once_cell = "1.17.1"
 parking_lot = "0.12.1"
 reqwest = { version = "0.11.18", default-features = false, features = ["rustls-tls", "json"] }
-revm = { version = "3.3.0", default-features = false, features = ["serde", "std"] }
+revm = { version = "3.5", default-features = false, features = ["serde", "std"] }
 serde = "1.0.163"
 serde_json = "1.0.96"
 thiserror = "1.0.40"
 tokio = { version = "1.28.1", features = ["macros"] }
 tracing = "0.1.37"
 url = "2.3.1"
+alloy-primitives = { version = "0.4", default-features = false, features = ["rlp", "serde", "std"] }
+bridge = {path = "../../bridge"}
+alloy-sol-types = "0.4.2"
+alloy-dyn-abi = "0.4.2"
+foundry-compilers = { git = "https://github.com/foundry-rs/compilers" }
 
 [build-dependencies]
-ethers-solc = { version = "2.0.7", features = ["svm-solc"] }
+foundry-compilers = { git = "https://github.com/foundry-rs/compilers" , features = ["svm-solc"] }
+alloy-json-abi = { version= "0.4.2"}
+serde_json = "1.0.96"

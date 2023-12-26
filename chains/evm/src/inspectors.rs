@@ -1,37 +1,27 @@
+use alloy_primitives::{address, Address, Bytes, U256};
+use alloy_sol_types::{sol, SolInterface, SolValue};
+use std::fmt;
 use std::collections::BTreeMap;
-use ethers::{
-    contract::abigen,
-    types::{Address, U256, H160},
-    abi::{AbiDecode, AbiEncode, Token, Tokenize},
-};
-use bytes::Bytes;
 use revm::{
-    interpreter::{Interpreter, opcode, CallInputs, InstructionResult, Gas},
-    Inspector, Database,
-    EVMData, JournaledState,
-    primitives::{Account}
+    interpreter::{opcode, CallInputs, Gas, InstructionResult, Interpreter},
+    primitives::Account,
+    Database, EVMData, Inspector,
 };
-use tracing::trace;
-
-use crate::utils::{b160_to_h160, h160_to_b160, u256_to_ru256, ru256_to_u256};
 
 /// `address(bytes20(uint160(uint256(keccak256('hevm cheat code')))))`
-pub const CHEATCODE_ADDRESS: Address = H160([
-    0x71, 0x09, 0x70, 0x9E, 0xcf, 0xa9, 0x1a, 0x80, 0x62, 0x6f, 0xf3, 0x98, 0x9d, 0x68, 0xf6, 0x7f,
-    0x5b, 0x1d, 0xd1, 0x2d,
-]);
+pub const CHEATCODE_ADDRESS: Address = address!("7109709ECfa91a80626fF3989D68f67F5b1DD12D");
 
-abigen!(
-    HEVM,
-    "[
-        store(address,bytes32,bytes32)
-        load(address,bytes32)(bytes32)
-        deal(address,uint256)
-        record()
-        accesses(address)(bytes32[],bytes32[])
-    ]",
-);
-pub use hevm::{HEVMCalls, HEVM_ABI};
+sol! {
+#[derive(Debug)]
+interface Vm {
+    function load(address target, bytes32 slot) external view returns (bytes32 data);
+    function deal(address account, uint256 newBalance) external;
+    function store(address target, bytes32 slot, bytes32 value) external;
+    function record() external;
+    function accesses(address target) external returns (bytes32[] memory readSlots, bytes32[] memory writeSlots);
+}
+}
+
 
 #[derive(Clone, Debug, Default)]
 pub struct RecordAccess {
@@ -52,68 +42,51 @@ impl CheatCodesInspector {
 
     fn apply_cheatcode<DB: Database>(
         &mut self,
-        data: &mut EVMData<'_,DB> ,
-        _caller: Address,
+        data: &mut EVMData<'_, DB>,
         call: &CallInputs,
-    ) -> Result<Bytes, Bytes> {
-        let decoded = HEVMCalls::decode(&call.input).map_err(|err| err.to_string().encode())?;
-        
-        let res = match decoded {
-            HEVMCalls::Store(inner) => {
-                data.journaled_state
-                .load_account(h160_to_b160(inner.0), data.db)
-                .map_err(|_err| Bytes::from("db error".encode()))?;
-                // ensure the account is touched
-                data.journaled_state.touch(&h160_to_b160(inner.0));
+    ) -> Result<Vec<u8>, Bytes> {
+        let decoded = Vm::VmCalls::abi_decode(&call.input, false).map_err(error_to_bytes)?;
+        // let caller = call.context.caller;
 
-                data.journaled_state
-                    .sstore(
-                        h160_to_b160(inner.0),
-                        u256_to_ru256(inner.1.into()),
-                        u256_to_ru256(inner.2.into()),
-                        data.db,
+        let res = match decoded {
+            Vm::VmCalls::store(inner) => {
+                let _ = journaled_account(data, inner.target).map_err(|_err| Bytes::from("db error"))?;
+                data.journaled_state.sstore(
+                    inner.target,
+                    inner.slot.into(),
+                    inner.value.into(),
+                    data.db,
+                ).map_err(|_err| Bytes::from("sstore error"))?;
+                Default::default()
+            }
+            Vm::VmCalls::load(inner) => {
+                data.journaled_state.load_account(inner.target, data.db).map_err(|_err| Bytes::from("db error"))?;
+                let (val, _) = data.journaled_state.sload(inner.target, inner.slot.into(), data.db).map_err(|_err| Bytes::from("db error"))?;
+                val.abi_encode()
+            }
+
+            Vm::VmCalls::deal(inner) => {
+                let account = journaled_account(data, inner.account).map_err(|_err| Bytes::from("db error"))?;
+                account.info.balance = inner.newBalance;
+                Default::default()
+            }
+
+            Vm::VmCalls::record(_) => {
+                self.accesses = Some(RecordAccess::default());
+                Default::default()
+            }
+
+            Vm::VmCalls::accesses(inner) => {
+                let address = inner.target;
+                let result = self.accesses.as_mut().map(|accesses| {
+                    (
+                        &accesses.reads.entry(address).or_default()[..],
+                        &accesses.writes.entry(address).or_default()[..],
                     )
-                    .map_err(|_err| Bytes::from("db error".encode()))?;
-                Bytes::new()
+                }).unwrap_or_default();
+                result.abi_encode_params()
             }
-            HEVMCalls::Load(inner) => {
-                data.journaled_state
-                    .load_account(h160_to_b160(inner.0), data.db)
-                    .map_err(|_err| Bytes::from("db error".encode()))?;
-                let (val, _) = data
-                    .journaled_state
-                    .sload(h160_to_b160(inner.0), u256_to_ru256(inner.1.into()), data.db)
-                    .map_err(|_err| Bytes::from("db error".encode()))?;
-                ru256_to_u256(val).encode().into()
-            }
-            HEVMCalls::Deal(inner) => {
-                let who = inner.0;
-                let value = inner.1;
-                trace!(?who, ?value, "deal cheatcode");
-                with_journaled_account(&mut data.journaled_state, data.db, who, |account| {
-  
-                    account.info.balance = value.into();
-                })
-                .map_err(|_err| Bytes::from("db error".encode()))?;
-                Bytes::new()
-            }
-            HEVMCalls::Record(_) => {
-                self.accesses = Some(Default::default());
-                Bytes::new()
-            }
-            HEVMCalls::Accesses(inner) => {
-                let address = inner.0;
-                if let Some(storage_accesses) = &mut self.accesses {
-                    ethers::abi::encode(&[
-                        storage_accesses.reads.remove(&address).unwrap_or_default().into_tokens()[0].clone(),
-                        storage_accesses.writes.remove(&address).unwrap_or_default().into_tokens()[0].clone(),
-                    ])
-                    .into()
-                } else {
-                    ethers::abi::encode(&[Token::Array(vec![]), Token::Array(vec![])]).into()
-                }
-            }
-            // _ => return Err("invalid cheatcode".into())
+
         };
         Ok(res)
     }
@@ -128,43 +101,40 @@ macro_rules! try_or_continue {
     };
 }
 
-impl <DB> Inspector<DB> for CheatCodesInspector
+impl<DB> Inspector<DB> for CheatCodesInspector
 where
     DB: Database,
 {
     fn step(
         &mut self,
         interpreter: &mut Interpreter,
-        _data: &mut EVMData<'_,DB> ,
-        _is_static:bool,
+        _data: &mut EVMData<'_, DB>,
     ) -> InstructionResult {
-        let pc = interpreter.program_counter();
+     
         if let Some(storage_accesses) = &mut self.accesses {
-            match interpreter.contract.bytecode.bytecode()[pc] {
+            match interpreter.current_opcode() {
                 opcode::SLOAD => {
                     let key = try_or_continue!(interpreter.stack().peek(0));
                     storage_accesses
                         .reads
-                        .entry(b160_to_h160(interpreter.contract().address))
-                        .or_insert_with(Vec::new)
-                        .push(key.into());
+                        .entry(interpreter.contract().address)
+                        .or_default()
+                        .push(key);
                 }
                 opcode::SSTORE => {
                     let key = try_or_continue!(interpreter.stack().peek(0));
                     storage_accesses
                         .reads
-                        .entry(b160_to_h160(interpreter.contract().address))
-                        .or_insert_with(Vec::new)
-                        .push(key.into());
+                        .entry(interpreter.contract().address)
+                        .or_default()
+                        .push(key);
                     storage_accesses
                         .writes
-                        .entry(b160_to_h160(interpreter.contract().address))
-                        .or_insert_with(Vec::new)
-                        .push(key.into());
+                        .entry(interpreter.contract().address)
+                        .or_default()
+                        .push(key);
                 }
-                _ => {
-                    // println!("other opcode: {:?}", opcode::OPCODE_JUMPMAP[interpreter.contract.bytecode.bytecode()[pc] as usize]);
-                },
+                _ => (),
             }
         }
 
@@ -173,33 +143,38 @@ where
 
     fn call(
         &mut self,
-        data: &mut EVMData<'_,DB> ,
+        data: &mut EVMData<'_, DB>,
         call: &mut CallInputs,
-        _is_static:bool,
     ) -> (InstructionResult, Gas, Bytes) {
-        if call.contract == h160_to_b160(CHEATCODE_ADDRESS) {
-            match self.apply_cheatcode(data, b160_to_h160(call.context.caller), call) {
-                Ok(retdata) => (InstructionResult::Return, Gas::new(call.gas_limit), retdata),
-                Err(err) => (InstructionResult::Revert, Gas::new(call.gas_limit), err),
+        let gas = Gas::new(call.gas_limit);
+        if call.contract == CHEATCODE_ADDRESS {
+            match self.apply_cheatcode(data, call) {
+                Ok(retdata) => (InstructionResult::Return, gas, retdata.into()),
+                Err(err) => (InstructionResult::Revert, gas, err),
             }
         } else {
-            (InstructionResult::Continue, Gas::new(call.gas_limit), Bytes::new())
+            (
+                InstructionResult::Continue,
+                gas,
+                Bytes::new(),
+            )
         }
     }
 }
 
-pub fn with_journaled_account<F, R, DB: Database>(
-    journaled_state: &mut JournaledState,
-    db: &mut DB,
+pub(super) fn journaled_account<'a, DB: Database>(
+    data: &'a mut EVMData<'_, DB>,
     addr: Address,
-    mut f: F,
-) -> Result<R, DB::Error>
-where
-    F: FnMut(&mut Account) -> R,
-{
-    let addr = h160_to_b160(addr);
-    journaled_state.load_account(addr, db)?;
-    journaled_state.touch(&addr);
-    let account = journaled_state.state.get_mut(&addr).expect("account loaded;");
-    Ok(f(account))
+) -> Result<&'a mut Account, DB::Error> {
+    data.journaled_state.load_account(addr, data.db)?;
+    data.journaled_state.touch(&addr);
+    Ok(data
+        .journaled_state
+        .state
+        .get_mut(&addr)
+        .expect("account is loaded"))
+}
+
+fn error_to_bytes(err: impl fmt::Display) -> Bytes {
+    fmt::format(format_args!("{err}")).into()
 }

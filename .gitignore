@@ -17,3 +17,5 @@ target/
 *.bin
 
 **/.DS_Store
+artifacts
+cache

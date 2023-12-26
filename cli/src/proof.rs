@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use std::io::{Read, Write};
-use chains_evm::setup::DealRecord;
+use chains_evm::{deal::DealRecord, evm_primitives::U256};
 use risc0_zkvm::Receipt;
 use serde::{Serialize, Deserialize};
 
@@ -9,9 +9,9 @@ pub struct Proof {
     pub version: String,
     pub image_id: [u32; 8],
     pub chain: String,
-    pub raw_metadata: String,
-    pub receipt: Receipt,
+    pub initial_balance: U256,
     pub deals: Vec<DealRecord>,
+    pub receipt: Receipt,
 }
 
 
