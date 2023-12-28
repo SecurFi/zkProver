@@ -1,6 +1,6 @@
 use std::io::Write;
 use tempfile::tempdir;
-use risc0_zkvm::{ExecutorEnv, serde::to_vec, ExecutorImpl, FileSegmentRef};
+use risc0_zkvm::{ExecutorEnv, serde::{to_vec, from_slice}, ExecutorImpl, FileSegmentRef};
 use ethers_core::types::BlockNumber;
 use ethers_providers::Middleware;
 use clap::Parser;
@@ -152,7 +152,13 @@ impl EvmArgs {
             .write_slice(&input);
             
             if let Some(mut dump_input) = self.dump_input {
-                dump_input.write_all(bytemuck::cast_slice(&input).as_ref())?;
+
+                let bytes: &[u8] = bytemuck::cast_slice(&input).as_ref();
+                dump_input.write_all(bytes)?;
+
+                let words: &[u32] = bytemuck::cast_slice(bytes).try_into()?;
+                let testinput: VmInput = from_slice(words)?;
+                println!("{:?}", testinput);
             }
 
             let env = builder.build().unwrap();
