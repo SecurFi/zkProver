@@ -1,0 +1,35 @@
+[package]
+name = "rand_core"
+version = "0.6.4"
+authors = ["The Rand Project Developers", "The Rust Project Developers"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/rust-random/rand"
+documentation = "https://docs.rs/rand_core"
+homepage = "https://rust-random.github.io/book"
+description = """
+Core random number generator traits and tools for implementation.
+"""
+keywords = ["random", "rng"]
+categories = ["algorithms", "no-std"]
+edition = "2021"
+rust-version = "1.60"
+
+[package.metadata.docs.rs]
+# To build locally:
+# RUSTDOCFLAGS="--cfg doc_cfg" cargo +nightly doc --all-features --no-deps --open
+all-features = true
+rustdoc-args = ["--cfg", "doc_cfg", "--generate-link-to-definition"]
+
+[package.metadata.playground]
+all-features = true
+
+[features]
+std = ["alloc",]
+alloc = []  # enables Vec and Box support without std
+serde1 = ["serde"] # enables serde for BlockRng wrapper
+getrandom = []
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+zerocopy = { version = "0.7.20", default-features = false }

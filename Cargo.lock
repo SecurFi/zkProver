@@ -1816,10 +1816,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be4136b2a15dd319360be1c07d9933517ccf0be8f16bf62a3bee4f0d618df427"
 dependencies = [
  "cfg-if",
- "js-sys",
  "libc",
  "wasi",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -5193,15 +5191,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "zk-guests",
-]
-
-[[package]]
-name = "zkwasm-prover"
-version = "0.2.0"
-dependencies = [
- "bridge",
- "getrandom",
- "wasm-bindgen",
 ]
 
 [[package]]

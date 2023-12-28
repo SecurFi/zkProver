@@ -24,7 +24,7 @@ thiserror = "1.0.40"
 tokio = { version = "1.28.1", features = ["macros"] }
 tracing = "0.1.37"
 url = "2.3.1"
-alloy-primitives = { version = "0.4", default-features = false, features = ["rlp", "serde", "std"] }
+alloy-primitives = { version = "0.4", default-features = false, features = ["rlp", "serde"] }
 bridge = {path = "../../bridge"}
 alloy-sol-types = "0.4.2"
 alloy-dyn-abi = "0.4.2"

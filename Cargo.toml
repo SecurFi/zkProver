@@ -4,7 +4,6 @@ members = [
     "cli",
     "bridge",
     "guests",
-    "wasm",
 ]
 
 [workspace.package]
