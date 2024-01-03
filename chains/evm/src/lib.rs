@@ -5,5 +5,5 @@ pub mod inspectors;
 pub mod db;
 pub mod deal;
 pub mod evm_primitives;
-pub mod sim;
+pub mod input_builder;
 pub mod mpt;

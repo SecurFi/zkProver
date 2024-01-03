@@ -4,8 +4,7 @@ use ethers_core::{abi::{Token, Tokenizable}, types::U256};
 use eyre::{Result, bail};
 use clap::Parser;
 use clio::Input;
-use risc0_zkvm::serde::from_slice;
-use zk_guests::{EVM_ELF, EVM_ID};
+use zk_guests::{EVM_ID};
 
 
 #[derive(Parser, Debug)]
@@ -15,12 +14,13 @@ pub struct SnarkArgs {
 
 
 impl SnarkArgs {
-    pub fn run(mut self) -> Result<()> {
+    pub fn run(self) -> Result<()> {
         let receipt: SnarkReceipt = serde_json::from_reader(self.input)?;
         println!("journal: {}", hex::encode(&receipt.journal));
         println!("post_state_digest: {}", hex::encode(&receipt.post_state_digest));
-        let vm_output: VmOutput = from_slice(&receipt.journal)?;
-        println!("vm_output: {:?}", vm_output);
+        let buf = &mut receipt.journal.as_slice();
+        let vm_output = VmOutput::decode(buf);
+        println!("vm_output: {:?}", vm_output.state_diff);
 
         let output_tokens = vec![
             Token::Bytes(receipt.journal),

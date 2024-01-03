@@ -1,4 +1,4 @@
-use alloy_primitives::{Address, address, BlockHash, BlockNumber, Bloom, Bytes, B256, B64, U256, b256};
+use alloy_primitives::{Address, address, BlockHash, BlockNumber, Bloom, Bytes, bytes, B256, B64, U256, b256};
 use alloy_rlp_derive::RlpEncodable;
 use keccak::KECCAK_EMPTY;
 use revm::{EVM, primitives::{AccountInfo, Bytecode, SpecId, TxEnv, TransactTo, BlockEnv}, db::DatabaseRef};
@@ -11,6 +11,8 @@ use sha2::Sha256;
 pub mod trie;
 pub mod keccak;
 
+#[cfg(not(target_os = "zkvm"))]
+use alloy_rlp::Buf;
 
 pub struct DbAccount {
     pub info: AccountInfo,
@@ -29,6 +31,7 @@ impl DatabaseRef for Db {
         match self.accounts.get(&address) {
             Some(db_account) => Ok(Some(db_account.info.clone())),
             None => {
+                // println!("address not found {}", address);
                 Err(())
             }
         }
@@ -46,6 +49,7 @@ impl DatabaseRef for Db {
                     if address == DEFAULT_CONTRACT_ADDRESS {
                         Ok(U256::from(0))
                     } else {
+                        // println!("storage not found {} {}", address, index);
                         Err(())
                     }
                 }
@@ -62,7 +66,10 @@ impl DatabaseRef for Db {
         .find(|(_block_no, _)| *_block_no == block_no);
         match entry {
             Some((_block_no, hash)) => Ok(*hash),
-            None => Err(())
+            None => {
+                // println!("block hash not found {}", number);
+                Err(())
+            }
         }
     }
     
@@ -75,8 +82,12 @@ pub const DEFAULT_CALLER: Address = address!("e42a4fc3902506f15E7E8FC100542D6310
 /// Stores the default poc contract address: 0x412049F92065a2597458c4cE9b969C846fE994fD
 pub const DEFAULT_CONTRACT_ADDRESS: Address = address!("412049F92065a2597458c4cE9b969C846fE994fD");
 
+/// func exploit()
+pub const DEFAULT_CALL_DATA: Bytes = bytes!("63d9b770");
+
 pub const EMPTY_LIST_HASH: B256 =
     b256!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347");
+
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, RlpEncodable)]
 #[rlp(trailing)]
@@ -192,20 +203,103 @@ pub struct Diff<T> {
     pub new: T,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct StateDiff {
     balance: Option<Diff<U256>>,
     storage: Map<U256, Diff<U256>>,
 }
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct VmOutput {
     pub artifacts_hash: B256,
-    pub block_hashes: Vec<(u64, BlockHash)>, // the biggest block number is the current block
+    pub block_hashes: Vec<(u64, BlockHash)>, // the biggest block number is the base block's number
     pub poc_contract_hash: B256,
-    pub state_diff: Option<Map<Address, StateDiff>>,
+    pub state_diff: Map<Address, StateDiff>,
 }
+
+
+impl VmOutput {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(self.artifacts_hash.as_slice());
+        buf.push(*self.block_hashes.len().to_be_bytes().last().unwrap());
+        for (block_number, block_hash) in self.block_hashes.iter() {
+            buf.extend_from_slice(&block_number.to_be_bytes());
+            buf.extend_from_slice(&block_hash.0);
+        }
+        
+        buf.extend_from_slice(self.poc_contract_hash.as_slice());
+
+        buf.push(*self.state_diff.len().to_be_bytes().last().unwrap());
+        for (address, state_diff) in self.state_diff.iter() {
+            buf.extend_from_slice(address.as_slice());
+            // buf.push(state_diff.balance.is_some() as u8);
+            match &state_diff.balance {
+                Some(balance) => {
+                    buf.push(1);
+                    buf.extend_from_slice(&balance.old.to_be_bytes::<32>());
+                    buf.extend_from_slice(&balance.new.to_be_bytes::<32>());
+                },
+                None => buf.push(0),
+            };
+
+            buf.push(*state_diff.storage.len().to_be_bytes().last().unwrap());
+            for (key, value) in state_diff.storage.iter() {
+                buf.extend_from_slice(&key.to_be_bytes::<32>());
+                buf.extend_from_slice(&value.old.to_be_bytes::<32>());
+                buf.extend_from_slice(&value.new.to_be_bytes::<32>());
+            }
+        }
+        buf
+    }
+
+    #[cfg(not(target_os = "zkvm"))]
+    pub fn decode<'a>(buf: &mut &[u8]) -> Self {
+        let artifacts_hash = B256::from_slice(unsafe { buf.get_unchecked(..32) });
+        buf.advance(32);
+        let block_hashes_len = buf.get_u8();
+        let mut block_hashes = Vec::new();
+        for _ in 0..block_hashes_len {
+            let block_number = buf.get_u64();
+            let block_hash = B256::from_slice(unsafe { buf.get_unchecked(..32) });
+            buf.advance(32);
+            block_hashes.push((block_number, block_hash));
+        }
+        let poc_contract_hash = B256::from_slice(unsafe { buf.get_unchecked(..32) });
+        buf.advance(32);
+        let state_diff_len = buf.get_u8();
+        let mut state_diff = Map::new();
+        for _ in 0..state_diff_len {
+            let address = Address::from_slice(unsafe { buf.get_unchecked(..20) });
+            buf.advance(20);
+            let balance_diff = if buf.get_u8() == 1 {
+                let old = U256::try_from_be_slice(unsafe { buf.get_unchecked(..32) }).unwrap();
+                buf.advance(32);
+                let new = U256::try_from_be_slice(unsafe { buf.get_unchecked(..32) }).unwrap();
+                buf.advance(32);
+                Some(Diff { old, new })
+            } else {
+                None
+            };
+            let storage_diff_len =  buf.get_u8();
+            let mut storage_diff = Map::new();
+            for _ in 0..storage_diff_len {
+                let key = U256::try_from_be_slice(unsafe { buf.get_unchecked(..32) }).unwrap();
+                buf.advance(32);
+                let old = U256::try_from_be_slice(unsafe { buf.get_unchecked(..32) }).unwrap();
+                buf.advance(32);
+                let new = U256::try_from_be_slice(unsafe { buf.get_unchecked(..32) }).unwrap();
+                buf.advance(32);
+                storage_diff.insert(key, Diff { old, new });
+            }
+            state_diff.insert(address, StateDiff { balance: balance_diff, storage: storage_diff });
+        }
+        VmOutput { artifacts_hash, block_hashes, poc_contract_hash, state_diff }
+    }
+
+}
+
 
 
 #[inline]
@@ -240,7 +334,7 @@ pub fn execute_vm(mut input: VmInput) -> VmOutput {
         let state_account = input.state_trie.get_rlp::<StateAccount>(&address_trie_key).unwrap().unwrap_or_default();
         if storage_trie.hash() != state_account.storage_root {
             panic!();
-        }    
+        }
         let code_hash = state_account.code_hash;
         let bytecode = if code_hash.0 == KECCAK_EMPTY.0 {
             Bytecode::new()
@@ -314,11 +408,10 @@ pub fn execute_vm(mut input: VmInput) -> VmOutput {
 
     let mut evm = EVM::new();
     evm.database(db);
-    let call_data = "0x63d9b770".parse::<Bytes>().unwrap();
     evm.env.tx = TxEnv {
         caller: DEFAULT_CALLER,
         transact_to: TransactTo::Call(DEFAULT_CONTRACT_ADDRESS),
-        data: call_data,
+        data: DEFAULT_CALL_DATA,
         value: U256::ZERO,
         ..Default::default()
     };
@@ -328,6 +421,7 @@ pub fn execute_vm(mut input: VmInput) -> VmOutput {
         ..Default::default()
     };
     evm.env.cfg.spec_id = get_specId_from_block_number(input.header.number);
+    
     let result_and_state = evm.transact_ref().unwrap();
     if !result_and_state.result.is_success() {
         panic!()
@@ -376,11 +470,7 @@ pub fn execute_vm(mut input: VmInput) -> VmOutput {
         artifacts_hash,
         block_hashes,
         poc_contract_hash,
-        state_diff: if state_diff.is_empty() {
-            None
-        } else {
-            Some(state_diff)
-        },
+        state_diff: state_diff,
     }
 }
 

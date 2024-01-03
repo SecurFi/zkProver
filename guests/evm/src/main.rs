@@ -8,6 +8,7 @@ risc0_zkvm::guest::entry!(main);
 pub fn main() {
     let input: VmInput = env::read();
     let output = execute_vm(input);
-    env::commit(&output);
-    // core::mem::forget(output);
+    // env::commit(&output);
+    env::commit_slice(output.encode().as_slice());
+    core::mem::forget(output);
 }

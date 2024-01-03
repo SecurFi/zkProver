@@ -1,54 +1,51 @@
+use ethers_providers::Middleware;
 use eyre::{bail, Result};
-use revm::db::CacheDB;
 use revm::primitives::{AccountInfo, BlockEnv, Bytecode, ExecutionResult, TransactTo, TxEnv};
-use revm::{db::DatabaseRef, EVM};
+use revm::EVM;
 
-use bridge::{get_specId_from_block_number, BlockHeader, DEFAULT_CALLER, DEFAULT_CONTRACT_ADDRESS};
+use bridge::{get_specId_from_block_number, BlockHeader, DEFAULT_CALLER, DEFAULT_CONTRACT_ADDRESS, DEFAULT_CALL_DATA, VmInput, Artifacts};
 
+use crate::db::{JsonBlockCacheDB, ProxyDb};
 use crate::deal::StoragePatch;
-use crate::evm_primitives::{Bytes, U256};
+use crate::evm_primitives::U256;
 
 
 
-pub fn sim_poc_tx<D>(
+pub fn build_vminput<'a, M>(
     contract: Bytecode,
-    header: &BlockHeader,
-    rpc_db: &D,
-    storage_patch: &StoragePatch,
+    header: BlockHeader,
+    rpc_db: &JsonBlockCacheDB<'a, M>,
+    storage_patch: StoragePatch,
     initial_balance: U256,
-) -> Result<()>
+) -> Result<VmInput>
 where
-    D: DatabaseRef,
-    <D as DatabaseRef>::Error: std::error::Error + Send + Sync +'static,
+    M: Middleware +'static,
 {
     let mut evm = EVM::new();
-    let mut db = CacheDB::new(rpc_db);
+    let mut db = ProxyDb::new(rpc_db);
     // init account
     db.insert_account_info(
         DEFAULT_CONTRACT_ADDRESS,
-        AccountInfo::new(initial_balance, 1, contract.hash_slow(), contract),
+        AccountInfo::new(initial_balance, 1, contract.hash_slow(), contract.clone()),
     );
     db.insert_account_info(DEFAULT_CALLER,  AccountInfo{
         nonce: 1, ..Default::default()
     });
 
     // apply patch
-    for (address, storage) in storage_patch {
-        let db_account = db
-            .load_account(*address)?;
-        db_account
-            .storage
-            .extend(storage.into_iter().map(|(key, value)| (key, value)))
+    for (address, storage) in storage_patch.iter() {
+        for (index, value) in storage {
+            db.insert_account_storage(address.clone(), index.clone(), value.clone());
+        }
     }
 
     evm.database(db);
     // call exploit()
-    let call_data = "0x63d9b770".parse::<Bytes>().unwrap();
     // tx env
     evm.env.tx = TxEnv {
         caller: DEFAULT_CALLER,
         transact_to: TransactTo::Call(DEFAULT_CONTRACT_ADDRESS),
-        data: call_data,
+        data: DEFAULT_CALL_DATA,
         value: U256::ZERO,
         ..Default::default()
     };
@@ -74,5 +71,19 @@ where
             bail!("Halt: {:#?}, gas used: {}", reason, gas_used)
         }
     }
-    Ok(())
+    db = evm.take_db();
+    let (state_trie, storage_trie, contracts, block_hashes) = db.compact_trace_data()?;
+    assert_eq!(header.state_root, state_trie.hash());
+    Ok(VmInput {
+        header: header,
+        state_trie: state_trie,
+        storage_trie: storage_trie,
+        contracts: contracts.into_iter().collect(),
+        block_hashes: block_hashes.into_iter().collect(),
+        poc_contract: contract.bytecode,
+        artifacts: Artifacts {
+            initial_balance: initial_balance,
+            storage: storage_patch,
+        }
+    })
 }

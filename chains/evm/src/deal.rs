@@ -2,7 +2,6 @@ use alloy_sol_types::{sol, SolCall};
 use eyre::{Result, bail};
 use serde::{Serialize, Deserialize};
 use std::collections::BTreeMap as Map;
-use std::collections::HashSet;
 use std::str::FromStr;
 use revm::{
     db::{DatabaseRef, CacheDB},
@@ -106,7 +105,7 @@ pub fn deal<D: DatabaseRef>(db: &D, rows: &Vec<DealRecord>) -> Result<StoragePat
         bail!("deal tx failed")
     }
     
-    let skip_addrs = HashSet::from([CHEATCODE_ADDRESS, Address::default(), DEFAULT_CONTRACT_ADDRESS, DEFAULT_CALLER]);
+    let skip_addrs = vec![CHEATCODE_ADDRESS, Address::default(), DEFAULT_CONTRACT_ADDRESS, DEFAULT_CALLER];
     let mut storage_patch: StoragePatch = Map::new();
     for (addr, account) in res.state.iter() {
         if skip_addrs.contains(addr){

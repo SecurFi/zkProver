@@ -1,21 +1,22 @@
 use std::io::Write;
 use tempfile::tempdir;
-use risc0_zkvm::{ExecutorEnv, serde::{to_vec, from_slice}, ExecutorImpl, FileSegmentRef};
+use risc0_zkvm::{ExecutorEnv, serde::to_vec, ExecutorImpl, FileSegmentRef};
 use ethers_core::types::BlockNumber;
 use ethers_providers::Middleware;
 use clap::Parser;
-use clio::Output;
+use clio::OutputPath;
 use eyre::{Result, bail, ContextCompat};
+use log::{info, debug};
 use tokio::time::Instant;
 use crate::proof::Proof;
-use bridge::{BlockHeader, DEFAULT_CONTRACT_ADDRESS, VmInput, Artifacts, VmOutput};
+use bridge::{BlockHeader, DEFAULT_CONTRACT_ADDRESS};
 use chains_evm::{
     poc_compiler::compile_poc,
     deal::{DealRecord, deal, StoragePatch}, 
     provider::try_get_http_provider,
     utils::parse_ether_value,
     db::{BlockchainDbMeta, ChainSpec, JsonBlockCacheDB},
-    evm_primitives::{U256, ToAlloy, Bloom}, sim::sim_poc_tx,
+    evm_primitives::{U256, ToAlloy, Bloom}, input_builder::build_vminput,
 };
 
 
@@ -33,8 +34,8 @@ pub struct EvmArgs {
 
     #[clap(short, long)]
     block_number: Option<u64>,
-    /// Set the balances of the exploit contract.
-    /// Examples: 1ether, 0xdac17f958d2ee523a2206206994597c13d831ec7:10gwei
+    /// Set the erc20 token balances of the exploit contract.
+    /// Examples: 0xdac17f958d2ee523a2206206994597c13d831ec7:10gwei
     #[clap(short, long)]
     deal: Option<Vec<DealRecord>>,
     /// Just simulate the exploit tx, don't actually generate a proof.
@@ -42,18 +43,18 @@ pub struct EvmArgs {
     pub dry_run: bool,
     /// Dump the vm input to a file.
     #[clap(long)]
-    dump_input: Option<Output>,
+    dump_input: Option<OutputPath>,
 
     #[clap(long, value_parser = parse_ether_value)]
     initial_balance: Option<U256>,
     /// Output file 
     #[clap(long, short, value_parser, default_value = "proof.bin")]
-    output: Output,
+    output: OutputPath,
 }
 
 impl EvmArgs {
     /// Executes the `evm` subcommand.
-    pub async fn run(mut self) -> Result<()> {
+    pub async fn run(self) -> Result<()> {
         let poc_runtime_bytecode = compile_poc(self.contract)?;
         let provider = try_get_http_provider(self.rpc_url)?;
         let block_id = match self.block_number {
@@ -92,8 +93,7 @@ impl EvmArgs {
         }
 
         println!("block hash: {}", block.hash.unwrap());
-        println!("header: {:#?}", header);
-        println!("EVM SIZE: {}", EVM_ELF.len());
+        info!("EVM IMAGE SIZE: {}, ID: {}", EVM_ELF.len(), hex::encode(bytemuck::cast::<[u32; 8], [u8; 32]>(EVM_ID)));
         let meta = BlockchainDbMeta {
             chain_spec: ChainSpec::mainnet(),
             header: header.clone(),
@@ -118,63 +118,36 @@ impl EvmArgs {
         if deal_records.len() > 0 {
             storage_patch = deal(&db, &deal_records)?;
         }
-        println!("deal state: {:#?}", storage_patch);
+        info!("deal state: {:#?}", storage_patch);
 
         let initial_balance = self.initial_balance.unwrap_or(U256::ZERO);
-        // pre run
-        sim_poc_tx(poc_runtime_bytecode.clone(), &header,  &db, &storage_patch, initial_balance)?;
 
+        debug!("Header: {:#?}", header);
+        let vm_input = build_vminput(poc_runtime_bytecode, header,  &db, storage_patch, initial_balance)?;
         db.flush();
-        let (state_trie, storage_trie, contracts, block_hashes) = db.compact_data()?;
-
-        assert_eq!(header.state_root, state_trie.hash());
-
-        let vm_input = VmInput {
-            header: header,
-            state_trie: state_trie,
-            storage_trie: storage_trie,
-            contracts: contracts.into_iter().collect(),
-            block_hashes: block_hashes.into_iter().collect(),
-            poc_contract: poc_runtime_bytecode.bytecode,
-            artifacts: Artifacts {
-                initial_balance: initial_balance,
-                storage: storage_patch,
-            }
-        };
-        
         
         let segment_dir = tempdir().unwrap();
-        let mut cycles = 0;
         let session = {
             let mut builder = ExecutorEnv::builder();
             let input = to_vec(&vm_input).expect("Could not serialize vm input");
             builder.session_limit(None)
             .write_slice(&input);
             
-            if let Some(mut dump_input) = self.dump_input {
-
+            if let Some(dump_input) = self.dump_input {
+                let mut output = dump_input.create()?;
                 let bytes: &[u8] = bytemuck::cast_slice(&input).as_ref();
-                dump_input.write_all(bytes)?;
-
-                let words: &[u32] = bytemuck::cast_slice(bytes).try_into()?;
-                let testinput: VmInput = from_slice(words)?;
-                println!("{:?}", testinput);
+                info!("dump input size: {} bytes", bytes.len());
+                output.write_all(bytes)?;
             }
 
             let env = builder.build().unwrap();
             let mut exec = ExecutorImpl::from_elf(env, EVM_ELF).unwrap();
             exec.run_with_callback(|segment| {
-                cycles += segment.cycles;
                 Ok(Box::new(FileSegmentRef::new(&segment, segment_dir.path())?))
             })
             .unwrap()
 
         };
-        // println!("IMAGE ID: {:x}", EVM_ID);
-       
-        let vm_output: VmOutput = session.journal.decode().unwrap();
-        println!("{:?}", vm_output);
-        println!("segments: {}, cycles: {}", session.segments.len(), cycles);
 
         if self.dry_run {
             return Ok(());
@@ -193,7 +166,8 @@ impl EvmArgs {
             deals: deal_records,
             receipt: receipt,
         };
-        proof.save(&mut self.output)?;
+        let mut output = self.output.create()?;
+        proof.save(&mut output)?;
         Ok(())
     }
 }

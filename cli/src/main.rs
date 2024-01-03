@@ -69,6 +69,9 @@ impl EyreHandler for Handler {
 
 
 fn main() -> eyre::Result<()> {
+    let mut builder = env_logger::Builder::from_default_env();
+    builder.filter_module("risc0_zkvm", log::LevelFilter::Off);
+    builder.try_init()?;
     eyre::set_hook(Box::new(move |_| Box::new(Handler)))?;
     
     let args = Cli::parse();

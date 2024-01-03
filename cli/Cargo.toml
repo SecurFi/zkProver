@@ -19,6 +19,8 @@ bytemuck = { version = "1.13", features = ["extern_crate_alloc"] }
 clap = { version = "=4.3.12", features = ["derive"] }
 clio = { version = "0.2.7", features = ["clap-parse"] }
 eyre = "0.6.8"
+log = "0.4"
+env_logger = "0.10"
 tokio = { version = "1.28.1", features = ["macros", "rt", "rt-multi-thread"] }
 risc0-zkvm = { version = "0.19.1", features = ["prove"]}
 zk-guests = {path = "../guests", optional = true}
