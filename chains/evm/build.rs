@@ -2,15 +2,17 @@ extern crate core;
 
 use std::{fs, io::Write, env, path::Path};
 
-use foundry_compilers::{Project, ProjectPathsConfig};
+use foundry_compilers::{Project, ProjectPathsConfig, Solc};
 use alloy_json_abi::ContractObject;
 
 
 fn main() {
     // Configure the project with all its paths, solc, cache etc.
+    let solc = Solc::find_or_install_svm_version("0.8.19").expect("could not install solc");
     let project = Project::builder()
         .paths(ProjectPathsConfig::hardhat(env!("CARGO_MANIFEST_DIR")).unwrap())
         .offline()
+        .solc(solc)
         .build()
         .unwrap();
     let output = project.compile().unwrap();
