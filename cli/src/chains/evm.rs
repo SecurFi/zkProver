@@ -8,8 +8,7 @@ use clio::OutputPath;
 use eyre::{Result, bail, ContextCompat};
 use log::{info, debug};
 use tokio::time::Instant;
-use crate::proof::Proof;
-use bridge::{BlockHeader, DEFAULT_CONTRACT_ADDRESS};
+use bridge::{BlockHeader, DEFAULT_CONTRACT_ADDRESS, VmOutput};
 use chains_evm::{
     poc_compiler::compile_poc,
     deal::{DealRecord, deal, StoragePatch}, 
@@ -18,6 +17,8 @@ use chains_evm::{
     db::{BlockchainDbMeta, ChainSpec, JsonBlockCacheDB},
     evm_primitives::{U256, ToAlloy, Bloom}, input_builder::build_vminput,
 };
+use crate::proof::Proof;
+
 
 
 #[cfg(feature = "prover")]
@@ -64,8 +65,8 @@ impl EvmArgs {
         let block = provider.get_block(block_id).await?;
         
         let block = block.expect("cound not found block");
-        println!("base block number: {}", block.number.unwrap());
-
+        println!("Block Number: {}", block.number.unwrap());
+        // println!("{:#x}", poc_runtime_bytecode.bytes());
         let header = BlockHeader {
             parent_hash: block.parent_hash.to_alloy(),
             uncles_hash: block.uncles_hash.to_alloy(),
@@ -92,7 +93,7 @@ impl EvmArgs {
             bail!("block header build failed")
         }
 
-        println!("block hash: {}", block.hash.unwrap());
+        println!("Block Hash: {:#x}", block.hash.unwrap());
         info!("EVM IMAGE SIZE: {}, ID: {}", EVM_ELF.len(), hex::encode(bytemuck::cast::<[u32; 8], [u8; 32]>(EVM_ID)));
         let meta = BlockchainDbMeta {
             chain_spec: ChainSpec::mainnet(),
@@ -149,6 +150,10 @@ impl EvmArgs {
 
         };
 
+        let buf = &mut session.journal.bytes.as_slice();
+        let vm_output = VmOutput::decode(buf);
+        print_vmoutput_pretty(&vm_output);
+
         if self.dry_run {
             return Ok(());
         }
@@ -169,5 +174,26 @@ impl EvmArgs {
         let mut output = self.output.create()?;
         proof.save(&mut output)?;
         Ok(())
+    }
+}
+
+fn print_vmoutput_pretty(vm_output: &VmOutput) {
+    println!("VmOutput: ");
+    println!("Artifacts Hash: {:#x}", vm_output.artifacts_hash);
+    println!("Block Hashes: ");
+    for (number, hash) in vm_output.block_hashes.iter() {
+        println!(" {}: {:#x}", number, hash);
+    }
+    println!("Poc Contract Hash: {:#x}", vm_output.poc_contract_hash);
+    println!("Accounts: ");
+    for (address, state_diff) in vm_output.state_diff.iter() {
+        println!(" Address: {:#x}", address);
+        if let Some(balance) = &state_diff.balance {
+            println!("  Balance: {} -> {}", balance.old, balance.new);
+        }
+        println!("  Storage:");
+        for (key, value) in state_diff.storage.iter() {
+            println!("   slot: {:#x} {:#x} -> {:#x}", key, value.old, value.new);
+        }
     }
 }

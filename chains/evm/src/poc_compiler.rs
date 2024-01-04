@@ -4,7 +4,10 @@ use revm::primitives::Bytecode;
 use foundry_compilers::Project;
 
 pub fn compile_poc(file: impl Into<PathBuf>) -> Result<Bytecode> {
-    let project = Project::builder().build().unwrap();
+    // let mut selection = Settings::default();
+    // selection.push_output_selection(ContractOutputSelection::Metadata);
+
+    let project = Project::builder().offline().ephemeral().no_artifacts().build().unwrap();
     let mut output = project.compile_files(vec![file, ]).unwrap();
     if output.has_compiler_errors() {
         bail!("Faield to build Solidity contracts")

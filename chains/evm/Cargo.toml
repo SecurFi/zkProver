@@ -28,9 +28,9 @@ alloy-primitives = { version = "0.4", default-features = false, features = ["rlp
 bridge = {path = "../../bridge"}
 alloy-sol-types = "0.4.2"
 alloy-dyn-abi = "0.4.2"
-foundry-compilers = { git = "https://github.com/foundry-rs/compilers" }
+foundry-compilers = { git = "https://github.com/foundry-rs/compilers", rev = "87cba1741fe55c5e516b9033d576bf2dd2bd89cf" }
 
 [build-dependencies]
-foundry-compilers = { git = "https://github.com/foundry-rs/compilers" , features = ["svm-solc"] }
+foundry-compilers = { git = "https://github.com/foundry-rs/compilers", rev = "87cba1741fe55c5e516b9033d576bf2dd2bd89cf" }
 alloy-json-abi = { version= "0.4.2"}
 serde_json = "1.0.96"

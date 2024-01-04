@@ -10,6 +10,7 @@ fn main() {
     // Configure the project with all its paths, solc, cache etc.
     let project = Project::builder()
         .paths(ProjectPathsConfig::hardhat(env!("CARGO_MANIFEST_DIR")).unwrap())
+        .offline()
         .build()
         .unwrap();
     let output = project.compile().unwrap();

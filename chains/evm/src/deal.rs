@@ -62,7 +62,10 @@ impl FromStr for DealRecord {
 pub type StoragePatch = Map<Address, Map<U256, U256>>;
 
 
-pub fn deal<D: DatabaseRef>(db: &D, rows: &Vec<DealRecord>) -> Result<StoragePatch> {
+pub fn deal<D: DatabaseRef>(db: &D, rows: &Vec<DealRecord>) -> Result<StoragePatch> 
+where
+    <D as DatabaseRef>::Error: std::fmt::Debug
+{
 
     let mut db = CacheDB::new(db);
     let bytecode = Bytecode::new_raw(DEAL_CONTRACT_CODE.into());
@@ -97,8 +100,8 @@ pub fn deal<D: DatabaseRef>(db: &D, rows: &Vec<DealRecord>) -> Result<StoragePat
 
     let res = match evm.inspect(CheatCodesInspector::new()) {
         Ok(res) => res,
-        Err(_e) => {
-            bail!("deal tx error")
+        Err(e) => {
+            bail!("deal tx error, {:?}", e)
         }
     };
     if !res.result.is_success() {
@@ -114,7 +117,7 @@ pub fn deal<D: DatabaseRef>(db: &D, rows: &Vec<DealRecord>) -> Result<StoragePat
         let changed_slot_count = account.storage.values().filter(|x| x.is_changed()).count();
         // check slot change, now only support erc20 
         if changed_slot_count > 1 {
-            bail!("contract {} can not to deal", addr);
+            bail!("contract {:#x} can not to deal", addr);
         }
 
         for (slot, diff) in account.storage.iter() {

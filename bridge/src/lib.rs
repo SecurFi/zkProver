@@ -205,8 +205,8 @@ pub struct Diff<T> {
 
 #[derive(Debug, Clone)]
 pub struct StateDiff {
-    balance: Option<Diff<U256>>,
-    storage: Map<U256, Diff<U256>>,
+    pub balance: Option<Diff<U256>>,
+    pub storage: Map<U256, Diff<U256>>,
 }
 
 
