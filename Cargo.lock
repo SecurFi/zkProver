@@ -1656,7 +1656,7 @@ dependencies = [
 [[package]]
 name = "foundry-compilers"
 version = "0.1.0"
-source = "git+https://github.com/foundry-rs/compilers#87cba1741fe55c5e516b9033d576bf2dd2bd89cf"
+source = "git+https://github.com/foundry-rs/compilers?rev=87cba1741fe55c5e516b9033d576bf2dd2bd89cf#87cba1741fe55c5e516b9033d576bf2dd2bd89cf"
 dependencies = [
  "alloy-json-abi",
  "alloy-primitives",
@@ -3701,9 +3701,9 @@ dependencies = [
 
 [[package]]
 name = "ruint"
-version = "1.10.1"
+version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95294d6e3a6192f3aabf91c38f56505a625aa495533442744185a36d75a790c4"
+checksum = "608a5726529f2f0ef81b8fde9873c4bb829d6b5b5ca6be4d97345ddf0749c825"
 dependencies = [
  "alloy-rlp",
  "ark-ff 0.3.0",
@@ -3711,6 +3711,7 @@ dependencies = [
  "bytes",
  "fastrlp",
  "num-bigint 0.4.4",
+ "num-traits",
  "parity-scale-codec",
  "primitive-types",
  "proptest",
@@ -5099,9 +5100,9 @@ checksum = "ed94fce61571a4006852b7389a063ab983c02eb1bb37b47f8272ce92d06d9538"
 
 [[package]]
 name = "winnow"
-version = "0.5.15"
+version = "0.5.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c2e3184b9c4e92ad5167ca73039d0c42476302ab603e2fec4487511f38ccefc"
+checksum = "8434aeec7b290e8da5c3f0d628cb0eac6cabcb31d14bb74f779a08109a5914d6"
 dependencies = [
  "memchr",
 ]

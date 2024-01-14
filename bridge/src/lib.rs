@@ -193,6 +193,7 @@ pub struct VmInput {
     pub contracts: Vec<Bytes>,
     pub block_hashes: Vec<(u64, BlockHash)>,
     pub poc_contract: Bytes,
+    pub author: [u8; 20],
     pub artifacts: Artifacts,
 }
 
@@ -215,6 +216,7 @@ pub struct VmOutput {
     pub artifacts_hash: B256,
     pub block_hashes: Vec<(u64, BlockHash)>, // the biggest block number is the base block's number
     pub poc_contract_hash: B256,
+    pub author: [u8; 20],
     pub state_diff: Map<Address, StateDiff>,
 }
 
@@ -230,6 +232,7 @@ impl VmOutput {
         }
         
         buf.extend_from_slice(self.poc_contract_hash.as_slice());
+        buf.extend_from_slice(self.author.as_slice());
 
         buf.push(*self.state_diff.len().to_be_bytes().last().unwrap());
         for (address, state_diff) in self.state_diff.iter() {
@@ -268,6 +271,10 @@ impl VmOutput {
         }
         let poc_contract_hash = B256::from_slice(unsafe { buf.get_unchecked(..32) });
         buf.advance(32);
+        let author  = unsafe {
+            buf.get_unchecked(..20)
+        };
+        buf.advance(20);
         let state_diff_len = buf.get_u8();
         let mut state_diff = Map::new();
         for _ in 0..state_diff_len {
@@ -295,7 +302,7 @@ impl VmOutput {
             }
             state_diff.insert(address, StateDiff { balance: balance_diff, storage: storage_diff });
         }
-        VmOutput { artifacts_hash, block_hashes, poc_contract_hash, state_diff }
+        VmOutput { artifacts_hash, block_hashes, poc_contract_hash, author: author.try_into().unwrap(), state_diff }
     }
 
 }
@@ -470,6 +477,7 @@ pub fn execute_vm(mut input: VmInput) -> VmOutput {
         artifacts_hash,
         block_hashes,
         poc_contract_hash,
+        author: input.author,
         state_diff: state_diff,
     }
 }

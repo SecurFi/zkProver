@@ -1,4 +1,4 @@
-use bridge::{VmInput, execute_vm, Artifacts};
+use bridge::{VmInput, execute_vm};
 use wasm_bindgen::prelude::*;
 
 mod deserializer;
@@ -7,36 +7,6 @@ use deserializer::from_slice;
 extern "C" {
     pub fn wasm_input(is_public: u32) -> u64;
     pub fn wasm_output(v: u64);
-    pub fn wasm_read_context() -> u64;
-    pub fn wasm_write_context(v: u64);
-    pub fn require(cond: bool);
-    pub fn wasm_dbg(v: u64);
-    pub fn wasm_dbg_char(v: u64);
-
-    pub fn merkle_setroot(x: u64);
-    pub fn merkle_address(x: u64);
-    pub fn merkle_set(x: u64);
-    pub fn merkle_get() -> u64;
-    pub fn merkle_getroot() -> u64;
-    pub fn merkle_fetch_data() -> u64;
-    pub fn merkle_put_data(x: u64);
-    pub fn poseidon_new(x: u64);
-    pub fn poseidon_push(x: u64);
-    pub fn poseidon_finalize() -> u64;
-
-    pub fn babyjubjub_sum_new(x: u64);
-    pub fn babyjubjub_sum_push(x: u64);
-    pub fn babyjubjub_sum_finalize() -> u64;
-
-}
-
-pub fn wasm_dbg_str(s: &str) {
-    unsafe {
-        require(s.len() < usize::MAX);
-    }
-    for i in s.as_bytes() {
-        unsafe { wasm_dbg_char(*i as u64) }
-    }
 }
 
 
@@ -44,19 +14,8 @@ fn get_input() -> VmInput {
     let length = unsafe { wasm_input(1) };
     let data = wasm_read_u8(length, 0);
     let words: &[u32] = bytemuck::cast_slice(data.as_slice());
-    from_slice(words).unwrap()
-    // VmInput {
-    //     header: Default::default(),
-    //     state_trie: Default::default(),
-    //     storage_trie: Default::default(),
-    //     contracts: Default::default(),
-    //     block_hashes: Default::default(),
-    //     poc_contract: Default::default(),
-    //     artifacts: Artifacts {
-    //         storage: Default::default(),
-    //         initial_balance: Default::default(),
-    //     }
-    // }
+    let input: VmInput = from_slice(words).unwrap();
+    return input;
 }
 
 
@@ -88,6 +47,12 @@ fn wasm_read_u8(length: u64, is_public: u32) -> Vec<u8> {
 #[wasm_bindgen]
 pub fn zkmain(){
     let vm_input = get_input();
-    execute_vm(vm_input);
-
+    let output = execute_vm(vm_input);
+    output.encode().as_slice().chunks(8).into_iter().for_each(|x| {
+        let mut data = [0u8; 8];
+        data[..x.len()].copy_from_slice(x);
+        unsafe {
+            wasm_output(u64::from_le_bytes(data));
+        }        
+    })
 }

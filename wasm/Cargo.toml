@@ -7,13 +7,17 @@ edition = "2021"
 version = "0.2.0"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib"]
 
 [dependencies]
 wasm-bindgen = "0.2.89"
 bridge = {path = "../bridge"}
 serde = { version = "1.0.193", default-features = false }
 bytemuck = "1.14.0"
+
+[profile.release]
+lto = true
+opt-level = 'z'
 
 [patch.crates-io]
 rand_core = { path = "./patch/rand_core" }

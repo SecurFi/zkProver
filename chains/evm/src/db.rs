@@ -163,7 +163,7 @@ impl<'a, M: Middleware + 'static> JsonBlockCacheDB<'a, M> {
         let keys_not_in_cache = locations.iter().cloned().filter(|k| !keys_in_cache.contains(k)).collect::<Vec<_>>();
 
         if keys_not_in_cache.len() > 0 || !cache_data.account_proofs.contains_key(&address) {
-            // println!("missing storage proof for account: {}", address);
+            debug!("get proof from rpc: {:#x}, {:#?}", address, keys_not_in_cache);
             let resp = self.tokio_handle.block_on(async {
                 self.provider.get_proof(address.to_ethers(), keys_not_in_cache, block_id).await
             })?;

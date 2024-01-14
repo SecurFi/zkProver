@@ -17,6 +17,7 @@ pub fn build_vminput<'a, M>(
     rpc_db: &JsonBlockCacheDB<'a, M>,
     storage_patch: StoragePatch,
     initial_balance: U256,
+    author: [u8; 20]
 ) -> Result<VmInput>
 where
     M: Middleware +'static,
@@ -81,6 +82,7 @@ where
         contracts: contracts.into_iter().collect(),
         block_hashes: block_hashes.into_iter().collect(),
         poc_contract: contract.bytecode,
+        author: author,
         artifacts: Artifacts {
             initial_balance: initial_balance,
             storage: storage_patch,

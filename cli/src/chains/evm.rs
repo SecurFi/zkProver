@@ -15,7 +15,7 @@ use chains_evm::{
     provider::try_get_http_provider,
     utils::parse_ether_value,
     db::{BlockchainDbMeta, ChainSpec, JsonBlockCacheDB},
-    evm_primitives::{U256, ToAlloy, Bloom}, input_builder::build_vminput,
+    evm_primitives::{U256, ToAlloy, Bloom, Address}, input_builder::build_vminput,
 };
 use crate::proof::Proof;
 
@@ -37,15 +37,18 @@ pub struct EvmArgs {
     block_number: Option<u64>,
     /// Set the erc20 token balances of the exploit contract.
     /// Examples: 0xdac17f958d2ee523a2206206994597c13d831ec7:10gwei
-    #[clap(short, long)]
-    deal: Option<Vec<DealRecord>>,
-    /// Just simulate the exploit tx, don't actually generate a proof.
     #[clap(long)]
+    deal: Option<Vec<DealRecord>>,
+    /// Set the author of the exploit contract.
+    #[clap(short, long)]
+    author: Option<Address>,
+    /// Just simulate the exploit tx, don't actually generate a proof.
+    #[clap(short, long)]
     pub dry_run: bool,
     /// Dump the vm input to a file.
     #[clap(long)]
     dump_input: Option<OutputPath>,
-
+    /// Set the initial balance of the exploit contract.
     #[clap(long, value_parser = parse_ether_value)]
     initial_balance: Option<U256>,
     /// Output file 
@@ -119,12 +122,14 @@ impl EvmArgs {
         if deal_records.len() > 0 {
             storage_patch = deal(&db, &deal_records)?;
         }
-        info!("deal state: {:#?}", storage_patch);
+        info!("Deal state: {:#?}", storage_patch);
 
         let initial_balance = self.initial_balance.unwrap_or(U256::ZERO);
 
         debug!("Header: {:#?}", header);
-        let vm_input = build_vminput(poc_runtime_bytecode, header,  &db, storage_patch, initial_balance)?;
+        let author = self.author.unwrap_or(Address::default());
+        info!("Author: {:#x}", author);
+        let vm_input = build_vminput(poc_runtime_bytecode, header,  &db, storage_patch, initial_balance, *author.0)?;
         db.flush();
         
         let segment_dir = tempdir().unwrap();
@@ -135,10 +140,12 @@ impl EvmArgs {
             .write_slice(&input);
             
             if let Some(dump_input) = self.dump_input {
+                let path = dump_input.path().to_os_string().clone();
                 let mut output = dump_input.create()?;
                 let bytes: &[u8] = bytemuck::cast_slice(&input).as_ref();
-                info!("dump input size: {} bytes", bytes.len());
                 output.write_all(bytes)?;
+                info!("dump input, path={},  size: {} bytes", path.to_string_lossy(), bytes.len());
+
             }
 
             let env = builder.build().unwrap();
@@ -159,9 +166,10 @@ impl EvmArgs {
         }
         
         let start = Instant::now();
+        println!("Prove locally..");
         let receipt = session.prove().unwrap();
         receipt.verify(EVM_ID)?;
-        println!("proof time: {:?}", start.elapsed());
+        println!("Proof time: {:?}", start.elapsed());
         
         let proof = Proof {
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -185,6 +193,7 @@ fn print_vmoutput_pretty(vm_output: &VmOutput) {
         println!(" {}: {:#x}", number, hash);
     }
     println!("Poc Contract Hash: {:#x}", vm_output.poc_contract_hash);
+    println!("Author: {:#x}", Address::from(vm_output.author));
     println!("Accounts: ");
     for (address, state_diff) in vm_output.state_diff.iter() {
         println!(" Address: {:#x}", address);
