@@ -7,8 +7,14 @@ use deserializer::from_slice;
 extern "C" {
     pub fn wasm_input(is_public: u32) -> u64;
     pub fn wasm_output(v: u64);
+    // pub fn wasm_dbg_char(v: u64);
 }
 
+// pub fn wasm_dbg_str(s: &str) {
+//     for i in s.as_bytes() {
+//         unsafe { wasm_dbg_char(*i as u64) }
+//     }
+// }
 
 fn get_input() -> VmInput {
     let length = unsafe { wasm_input(1) };
@@ -28,13 +34,13 @@ fn wasm_read_u8(length: u64, is_public: u32) -> Vec<u8> {
         if i * 8 + 8 < length {
             unsafe {
                 let v = wasm_input(is_public);
-                v.to_le_bytes().iter().for_each(|x| bytes.push(*x))
+                v.to_be_bytes().iter().for_each(|x| bytes.push(*x))
             }
         } else {
             unsafe {
                 let v = wasm_input(is_public);
                 let left = (length - i * 8).try_into().unwrap();
-                v.to_le_bytes()[0..left].iter().for_each(|x| bytes.push(*x))
+                v.to_be_bytes()[0..left].iter().for_each(|x| bytes.push(*x))
             }
         }
 
@@ -52,7 +58,13 @@ pub fn zkmain(){
         let mut data = [0u8; 8];
         data[..x.len()].copy_from_slice(x);
         unsafe {
-            wasm_output(u64::from_le_bytes(data));
+            wasm_output(u64::from_be_bytes(data));
         }        
     })
 }
+
+// for emulator
+// #[wasm_bindgen]
+// pub fn _start() {
+//     zkmain();
+// }

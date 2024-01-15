@@ -145,7 +145,6 @@ impl EvmArgs {
                 let bytes: &[u8] = bytemuck::cast_slice(&input).as_ref();
                 output.write_all(bytes)?;
                 info!("dump input, path={},  size: {} bytes", path.to_string_lossy(), bytes.len());
-
             }
 
             let env = builder.build().unwrap();
@@ -160,7 +159,7 @@ impl EvmArgs {
         let buf = &mut session.journal.bytes.as_slice();
         let vm_output = VmOutput::decode(buf);
         print_vmoutput_pretty(&vm_output);
-
+        
         if self.dry_run {
             return Ok(());
         }
