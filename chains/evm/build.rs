@@ -2,13 +2,15 @@ extern crate core;
 
 use std::{fs, io::Write, env};
 
-use ethers_solc::{Project, ProjectPathsConfig};
+use ethers_solc::{Project, ProjectPathsConfig, Solc};
 
 fn main() {
     // Configure the project with all its paths, solc, cache etc.
+    let solc = Solc::find_or_install_svm_version("0.8.19").expect("could not install solc");
     let project = Project::builder()
         .paths(ProjectPathsConfig::hardhat(env!("CARGO_MANIFEST_DIR")).unwrap())
-        // .offline()
+        .offline()
+        .solc(solc)
         .build()
         .unwrap();
     let output = project.compile().unwrap();

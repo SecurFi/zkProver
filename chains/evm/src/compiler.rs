@@ -1,7 +1,7 @@
 use ethers::{
     solc::{
         Project, info::ContractInfo, ConfigurableContractArtifact,
-        SolcConfig, artifacts::{output_selection::ContractOutputSelection, Settings}, ConfigurableArtifacts
+        SolcConfig, artifacts::{output_selection::ContractOutputSelection, Settings}, ConfigurableArtifacts, Solc
     },
 };
 
@@ -14,10 +14,13 @@ pub fn compile_contract(contract: &ContractInfo) -> eyre::Result<ConfigurableCon
         .settings(settings)
         .build();
     
+    let solc = Solc::find_or_install_svm_version("0.8.19").expect("could not install solc");
     let project = Project::builder()
         .artifacts(artifacts)
         .set_cached(false)
         .set_no_artifacts(true)
+        .offline()
+        .solc(solc)
         .solc_config(solc_config)
         .build().unwrap();
     let mut output = project.compile_files(vec![contract.path.clone().unwrap()]).unwrap();
