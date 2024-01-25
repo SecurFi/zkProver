@@ -1,5 +1,5 @@
 # wasm := "pkg/zkwasm_prover_bg.wasm"
-wasm := "pkg/zkwasm_prover_bg.wasm"
+wasm := "pkg/zkwasm_prover_bg_patched.wasm"
 args := "-k 19 --function zkmain --output ./output --wasm " + wasm
 proof := "output/zkwasm.0.transcript.data"
 
@@ -7,14 +7,21 @@ cli := env_var_or_default('ZKWASM_CLI', 'zkwasm-cli-x86')
 
 build:
   wasm-pack build --release
+  python3 patch.py
 
 setup:
   rm -rf output
   mkdir -p output
   {{cli}} {{args}} setup
 
+run:
+  {{cli}} {{args}} dry-run --public <input size>:i64 --private <path>:file
+
+sim:
+  node emulator/index.js pkg/zkwasm_prover_bg.wasm <input size>  <path>
+
 prove:
-  {{cli}} {{args}} single-prove
+  {{cli}} {{args}} single-prove --public <input size>:i64 --private <path>:file
 
 verify:
   {{cli}} {{args}} single-verify --proof {{proof}}
