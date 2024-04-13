@@ -1,0 +1,16 @@
+[package]
+name = "guest"
+version = "0.2.0"
+edition = "2021"
+
+[[bin]]
+name = "guest"
+path = "./src/lib.rs"
+
+[features]
+guest = []
+
+[dependencies]
+jolt = { package = "jolt-sdk", git = "https://github.com/a16z/jolt"}
+bridge = { path = "../bridge",  default-features = false}
+

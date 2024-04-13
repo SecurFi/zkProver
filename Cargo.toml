@@ -1,16 +1,46 @@
-[workspace]
-members = [
-    "chains/evm",
-    "cli",
-    "bridge",
-    "guests",
-]
-
-[workspace.package]
+[package]
+name = "zkProver"
 version = "0.2.0"
 edition = "2021"
 homepage = "https://0xhacked.com/"
 repository = "https://github.com/0xHackedLabs/zkProver"
+
+[workspace]
+members = [
+    "chains/evm",
+    "bridge",
+    "guest"
+]
+resolver = "2"
+
+[dependencies]
+chains-evm = { path = "./chains/evm" }
+ethers-core = {version = "2.0"}
+ethers-providers = { version = "2.0"}
+
+bridge = { path = "./bridge" }
+
+serde = { version = "1.0.163" }
+serde_json = "1.0.96"
+bincode = "1.3.3"
+bytemuck = { version = "1.13", features = ["extern_crate_alloc"] }
+clap = { version = "=4.3.12", features = ["derive"] }
+clio = { version = "0.2.7", features = ["clap-parse"] }
+eyre = "0.6.8"
+log = "0.4"
+env_logger = "0.10"
+tokio = { version = "1.28.1", features = ["macros", "rt", "rt-multi-thread"] }
+tempfile = "3.5.0"
+hex = "0.4.3"
+dirs-next = "2"
+jolt = { package = "jolt-sdk", git = "https://github.com/a16z/jolt", features = ["std"] }
+guest = { path = "./guest" }
+
+[patch.crates-io]
+ark-ff = { git = "https://github.com/a16z/arkworks-algebra", branch = "optimize/field-from-u64" }
+ark-ec = { git = "https://github.com/a16z/arkworks-algebra", branch = "optimize/field-from-u64" }
+ark-serialize = { git = "https://github.com/a16z/arkworks-algebra", branch = "optimize/field-from-u64" }
+
 
 [profile.release]
 # Optimize for binary size, but keep loop vectorization

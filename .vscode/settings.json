@@ -4,7 +4,7 @@
     },
     "rust-analyzer.linkedProjects": [
         "./Cargo.toml",
-        "./guests/evm/Cargo.toml",
-        "./wasm/Cargo.toml",
+        // "./guest/evm/Cargo.toml",
+        // "./wasm/Cargo.toml",
     ]
 }

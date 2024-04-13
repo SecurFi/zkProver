@@ -1,5 +1,8 @@
 # zkProver
 
+> This Branch is under development. Wait the [Jolt](https://github.com/a16z/jolt) to make the adoption of std;
+
+
 Besides generating the proof of exploit using [our online tool](https://www.0xhacked.com/tool), you can also do it locally with zkProver.
 
 ## Installation
@@ -68,4 +71,4 @@ We highly recommend you start hacking from [PoC demos](https://github.com/0xHack
 3. Based on Helios, compute asset changes in our zkVerify solution to provide a safe and open-source trustless localRPC node service
 
 ## Acknowledgements
-Thanks to the contributions of [foundry](https://github.com/foundry-rs/foundry), [revm](https://github.com/bluealloy/revm), [reth](https://github.com/paradigmxyz/reth), [ethers-rs](https://github.com/gakonst/ethers-rs) , [zeth](https://github.com/risc0/zeth) and [RISC Zero](https://github.com/risc0/risc0) to crypto. We're grateful for these awesome projects.
+Thanks to the contributions of [foundry](https://github.com/foundry-rs/foundry), [revm](https://github.com/bluealloy/revm), [reth](https://github.com/paradigmxyz/reth), [ethers-rs](https://github.com/gakonst/ethers-rs) , [zeth](https://github.com/risc0/zeth), [Jolt](https://github.com/a16z/jolt) and [RISC Zero](https://github.com/risc0/risc0) to crypto. We're grateful for these awesome projects.
