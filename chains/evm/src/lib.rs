@@ -25,3 +25,4 @@ pub use ethers::{
 
 pub mod inspectors;
 pub mod setup;
+pub mod balance;

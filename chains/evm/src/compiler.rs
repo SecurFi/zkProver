@@ -1,8 +1,6 @@
-use ethers::{
-    solc::{
+use ethers_solc::{
         Project, info::ContractInfo, ConfigurableContractArtifact,
         SolcConfig, artifacts::{output_selection::ContractOutputSelection, Settings}, ConfigurableArtifacts, Solc
-    },
 };
 
 

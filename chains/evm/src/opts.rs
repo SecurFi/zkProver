@@ -1,8 +1,8 @@
 use ethers::{
     providers::{Middleware, Provider},
-    solc::utils::RuntimeOrHandle,
     types::{Address, Block, Chain, TxHash, H256, U256},
 };
+use ethers_solc::utils::RuntimeOrHandle;
 use eyre::WrapErr;
 use revm::primitives::{BlockEnv, CfgEnv, SpecId, TxEnv, U256 as rU256};
 use serde::{Deserialize, Deserializer, Serialize};

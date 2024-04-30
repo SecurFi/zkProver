@@ -13,9 +13,8 @@ use clio::Output;
 use ethers_core::types::{Address, U256};
 use ethers_solc::{info::ContractInfo, utils::canonicalized, Artifact};
 use eyre::{Result, bail};
-use risc0_zkvm::{serde::to_vec, Executor, ExecutorEnv, FileSegmentRef};
+use risc0_zkvm::{ExecutorEnv, ExecutorImpl};
 
-use tempfile::tempdir;
 #[cfg(feature = "prover")]
 use zk_methods::{EVM_ELF, EVM_ID};
 
@@ -131,54 +130,62 @@ impl EvmArgs {
         env.cfg.chain_id = result.env.cfg.chain_id.clone();
         env.cfg.spec_id = result.env.cfg.spec_id.clone();
 
-        if self.dry_run {
-            return Ok(());
-        }
 
         let evm_id: Vec<u8> = EVM_ID.iter().flat_map(|x| x.to_le_bytes()).collect();
         #[cfg(feature = "prover")]
         {
-            println!(
-                "starting generate zk proof, image id: {}",
-                hex::encode(evm_id)
-            );
-            let start = Instant::now();
             
+            let start = Instant::now();
+            // let segment_limit_po2 = 22;
             let zk_env = ExecutorEnv::builder()
-                .add_input(&to_vec(&env).unwrap())
-                .add_input(&to_vec(&zkdb).unwrap())
-                .session_limit(Some(1024 * 1024 * 1024))
+                .write(&env).unwrap()
+                .write(&zkdb).unwrap()
+                // .segment_limit_po2(segment_limit_po2)
+                // .session_limit(None)
                 .build()
                 .unwrap();
             
-            let mut exec = Executor::from_elf(zk_env, EVM_ELF).unwrap();
+            
+            let mut exec = ExecutorImpl::from_elf(zk_env, EVM_ELF).unwrap();
 
-            let segment_dir = tempdir().unwrap();
-            let session = exec
-                .run_with_callback(|segment| {
-                    println!("proof segment{}: cycles: {:?}", segment.index, segment.insn_cycles);
-                    Ok(Box::new(FileSegmentRef::new(
-                        &segment,
-                        &segment_dir.path(),
-                    )?))
-                })
-                .unwrap();
-            let receipt = session.prove().unwrap();
+            let session = exec.run().unwrap();
+            
+            // println!(
+            //     "Executor ran in (roughly) {} cycles",
+            //     session.segments.len() * (1 << segment_limit_po2)
+            // );
 
-            receipt.verify(EVM_ID)?;
-
-            let proof = Proof {
-                version: env!("CARGO_PKG_VERSION").to_string(),
-                image_id: EVM_ID,
-                chain: "ethereum".to_string(),
-                raw_metadata: contract.raw_metadata.unwrap(),
-                deals: deal_records,
-                receipt,
-            };
-            proof.save(&mut self.output).unwrap();
-            let duration = start.elapsed();
-            println!("Time elapsed is: {:?}", duration);
+            if !self.dry_run {
+                println!(
+                    "starting generate zk proof, image id: {}",
+                    hex::encode(evm_id)
+                );
+                let receipt = session.prove().unwrap();
+                receipt.verify(EVM_ID)?;
+                let proof = Proof {
+                    version: env!("CARGO_PKG_VERSION").to_string(),
+                    image_id: EVM_ID,
+                    chain: "ethereum".to_string(),
+                    raw_metadata: contract.raw_metadata.unwrap(),
+                    deals: deal_records,
+                    receipt: Some(receipt),
+                };
+                proof.save(&mut self.output).unwrap();
+                let duration = start.elapsed();
+                println!("Time elapsed is: {:?}", duration);
+            }
+            
         };
         Ok(())
     }
 }
+
+// const NULL_SEGMENT_REF: NullSegmentRef = NullSegmentRef {};
+// #[derive(Serialize, Deserialize)]
+// struct NullSegmentRef {}
+
+// impl SegmentRef for NullSegmentRef {
+//     fn resolve(&self) -> anyhow::Result<Segment> {
+//         unimplemented!()
+//     }
+// }

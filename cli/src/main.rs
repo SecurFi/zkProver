@@ -7,6 +7,11 @@ use eyre::EyreHandler;
 mod chains;
 use chains::evm::EvmArgs;
 mod proof;
+mod tools;
+use tools::{PackArgs, PreArgs};
+mod verify;
+use verify::VerifyArgs;
+
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about, long_about=None)]
@@ -19,6 +24,9 @@ struct Cli {
 enum Commands {
     /// Run the EVM proof generator
     Evm(EvmArgs),
+    Pre(PreArgs),
+    Pack(PackArgs),
+    Verify(VerifyArgs),
 }
 
 #[allow(unused)]
@@ -65,10 +73,13 @@ impl EyreHandler for Handler {
 
 
 fn main() -> eyre::Result<()> {
+    env_logger::init();
     eyre::set_hook(Box::new(move |_| Box::new(Handler)))?;
-    
     let args = Cli::parse();
     match args.command {
         Commands::Evm(args) => block_on(args.run()),
+        Commands::Pre(args) => block_on(args.run()),
+        Commands::Pack(args) => args.run(),
+        Commands::Verify(args) => block_on(args.run())
     }
 }

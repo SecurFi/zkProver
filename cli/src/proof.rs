@@ -10,7 +10,7 @@ pub struct Proof {
     pub image_id: [u32; 8],
     pub chain: String,
     pub raw_metadata: String,
-    pub receipt: Receipt,
+    pub receipt: Option<Receipt>,
     pub deals: Vec<DealRecord>,
 }
 
