@@ -11,7 +11,7 @@ use chains_evm::{
 use clap::Parser;
 use clio::Output;
 use ethers_core::types::{Address, U256};
-use ethers_solc::{info::ContractInfo, utils::canonicalized, Artifact};
+use ethers_solc::Artifact;
 use eyre::{Result, bail};
 use risc0_zkvm::{ExecutorEnv, ExecutorImpl};
 
@@ -45,22 +45,20 @@ pub struct EvmArgs {
 impl EvmArgs {
     /// Executes the `evm` subcommand.
     pub async fn run(mut self) -> Result<()> {
-        let path = canonicalized(self.contract).to_string_lossy().to_string();
-        let contract_info = ContractInfo {
-            path: Some(path), name: "Exploit".to_string()
-        };
-        let contract = compile_contract(&contract_info)?;
+        let contract = compile_contract(self.contract)?;
         let abi = contract.get_abi().unwrap().to_owned();
         let mut evm_opts = EvmOpts::default();
         evm_opts.fork_url = Some(self.rpc_url.clone());
         evm_opts.fork_block_number = self.block_number;
 
-        let env = evm_opts.evm_env().await;
+        let env: Env = evm_opts.evm_env().await;
+        let rpc_cache_dir = dirs_next::home_dir().expect("home dir not found").join(".0xhacked").join("cache").join("rpc");
+        let cache_path =  rpc_cache_dir.join(format!("{}", env.cfg.chain_id)).join(format!("{}.db",env.block.number));
 
         let mut db = create_db(
             env.clone(),
             self.rpc_url.clone(),
-            Some(format!("mainnet-cache-{}.db", env.block.number)),
+            cache_path.to_str().map(|x| x.into()),
         )
         .await;
 
@@ -89,7 +87,6 @@ impl EvmArgs {
         let deployed_bytecode = contract.get_deployed_bytecode().unwrap().into_owned();
         let mut runner = POCRunner::new(
             env.clone(),
-            None,
             &mut db,
             deployed_bytecode
                 .bytecode

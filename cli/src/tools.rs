@@ -10,7 +10,7 @@ use chains_evm::{
 };
 use bridge::{Env, ZkDb};
 use ethers_core::types::{Address, U256};
-use ethers_solc::{info::ContractInfo, utils::canonicalized, Artifact};
+use ethers_solc::Artifact;
 use risc0_zkvm::{serde::to_vec, Receipt};
 use clio::{Output, Input};
 use zk_methods::EVM_ID;
@@ -62,11 +62,7 @@ pub struct PackArgs {
 
 impl PreArgs {
     pub async fn run(mut self) -> Result<()> {
-        let path = canonicalized(self.contract).to_string_lossy().to_string();
-        let contract_info = ContractInfo {
-            path: Some(path), name: "Exploit".to_string()
-        };
-        let contract = compile_contract(&contract_info)?;
+        let contract = compile_contract(self.contract)?;
         let abi = contract.get_abi().unwrap().to_owned();
         let mut evm_opts = EvmOpts::default();
         evm_opts.fork_url = Some(self.rpc_url.clone());
@@ -109,7 +105,6 @@ impl PreArgs {
         let deployed_bytecode = contract.get_deployed_bytecode().unwrap().into_owned();
         let mut runner = POCRunner::new(
             env.clone(),
-            None,
             &mut db,
             deployed_bytecode
                 .bytecode

@@ -29,7 +29,7 @@ use std::{
         Arc,
     },
 };
-use tracing::{error, trace, warn};
+use tracing::{error, trace, warn, info};
 
 // Various future/request type aliases
 
@@ -187,7 +187,7 @@ where
                 entry.get_mut().push(listener);
             }
             Entry::Vacant(entry) => {
-                trace!(target: "backendhandler", "preparing storage request, address={:?}, idx={}", address, idx);
+                info!(target: "backendhandler", "preparing storage request, address={:?}, idx={}", address, idx);
                 entry.insert(vec![listener]);
                 let provider = self.provider.clone();
                 let block_id = self.block_id;
@@ -205,7 +205,7 @@ where
 
     /// returns the future that fetches the account data
     fn get_account_req(&self, address: Address) -> ProviderRequest<M::Error> {
-        trace!(target: "backendhandler", "preparing account request, address={:?}", address);
+        info!(target: "backendhandler", "preparing account request, address={:?}", address);
         let provider = self.provider.clone();
         let block_id = self.block_id;
         let fut = Box::pin(async move {
@@ -690,7 +690,7 @@ mod tests {
         // opts::EvmOpts,
     };
     use crate::provider::get_http_provider;
-    use ethers::{solc::utils::RuntimeOrHandle};
+    use ethers_solc::utils::RuntimeOrHandle;
     // use create::provider::get_http_provider;
     // use foundry_config::Config;
     use std::{collections::BTreeSet, path::PathBuf, sync::Arc};
