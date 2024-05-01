@@ -1,18 +1,18 @@
 # zkProver
 
-Besides generating the proof of exploit using [our online tool](https://www.0xhacked.com/tool), you can also do it locally with zkProver.
+Besides generating the proof of exploit using [our online tool](https://www.SecurFi.com/tool), you can also do it locally with zkProver.
 
 ## Installation
 
 Currently, zkProver supports **Linux** and **MacOS with Apple Silicon**.
 
 ``` bash
-curl -L https://install.0xHacked.com | bash
+curl -L https://install.SecurFi.com | bash
 ```
 
 > If you're using MacOS, please make sure you have installed Xcode, `xcode-select --install` and run `xcrun metal` successfully.
 
-If you encounter any errors, please contact me via [Telegram](https://t.me/Real0xHacked).
+If you encounter any errors, please contact me via [Telegram](https://t.me/SecurFi).
 
 ## Building from source
 ### Requirements
@@ -57,10 +57,10 @@ cargo run -r -p zkProver -F cuda -- evm -r <RPC_URL> -b <BLOCK_NUMBER> -d <DEAL>
 cargo run -r -p zkProver -- evm -r <RPC_URL> -b <BLOCK_NUMBER> -d <DEAL> <path>
 ```
 
-We highly recommend you start hacking from [PoC demos](https://github.com/0xHackedLabs/PoC) after installing zkProver.
+We highly recommend you start hacking from [PoC demos](https://github.com/SecurFi/PoC) after installing zkProver.
 
 ## Documentation
-[Documentation for 0xHacked](https://docs.0xHacked.com)
+[Documentation for SecurFi](https://docs.SecurFi.com)
 
 ## todo
 1. Maintain an in-house version of [revm](https://github.com/bluealloy/revm), simplify the code, remove unnecessary features, optimize data structures to make it more zk-friendly

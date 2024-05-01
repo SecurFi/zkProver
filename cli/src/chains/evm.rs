@@ -1,4 +1,3 @@
-use std::time::Instant;
 use crate::proof::Proof;
 use bridge::{Env, ZkDb};
 use chains_evm::{
@@ -6,18 +5,18 @@ use chains_evm::{
     opts::EvmOpts,
     runner::{create_db, POCRunner},
     setup::{deal_commit, DealRecord},
-    DEFAULT_CONTRACT_ADDRESS, DEFAULT_CALLER,
+    DEFAULT_CALLER, DEFAULT_CONTRACT_ADDRESS,
 };
 use clap::Parser;
 use clio::Output;
 use ethers_core::types::{Address, U256};
 use ethers_solc::Artifact;
-use eyre::{Result, bail};
+use eyre::{bail, Result};
 use risc0_zkvm::{ExecutorEnv, ExecutorImpl};
+use std::time::Instant;
 
 #[cfg(feature = "prover")]
 use zk_methods::{EVM_ELF, EVM_ID};
-
 
 #[derive(Parser, Debug)] // requires `derive` feature
 pub struct EvmArgs {
@@ -37,7 +36,7 @@ pub struct EvmArgs {
     #[clap(long)]
     pub dry_run: bool,
 
-    /// Output file 
+    /// Output file
     #[clap(long, short, value_parser, default_value = "proof.bin")]
     output: Output,
 }
@@ -52,8 +51,14 @@ impl EvmArgs {
         evm_opts.fork_block_number = self.block_number;
 
         let env: Env = evm_opts.evm_env().await;
-        let rpc_cache_dir = dirs_next::home_dir().expect("home dir not found").join(".0xhacked").join("cache").join("rpc");
-        let cache_path =  rpc_cache_dir.join(format!("{}", env.cfg.chain_id)).join(format!("{}.db",env.block.number));
+        let rpc_cache_dir = dirs_next::home_dir()
+            .expect("home dir not found")
+            .join(".SecurFi")
+            .join("cache")
+            .join("rpc");
+        let cache_path = rpc_cache_dir
+            .join(format!("{}", env.cfg.chain_id))
+            .join(format!("{}.db", env.block.number));
 
         let mut db = create_db(
             env.clone(),
@@ -71,7 +76,7 @@ impl EvmArgs {
                 ..x.clone()
             })
             .collect();
-        
+
         if deal_records.len() > 0 {
             deal_commit(&mut db, &deal_records)?;
         }
@@ -104,7 +109,7 @@ impl EvmArgs {
         let result = runner.run()?;
 
         db.flush_cache();
-        
+
         if !result.success {
             bail!("execution failed, {:?}", result.reason);
         }
@@ -127,26 +132,25 @@ impl EvmArgs {
         env.cfg.chain_id = result.env.cfg.chain_id.clone();
         env.cfg.spec_id = result.env.cfg.spec_id.clone();
 
-
         let evm_id: Vec<u8> = EVM_ID.iter().flat_map(|x| x.to_le_bytes()).collect();
         #[cfg(feature = "prover")]
         {
-            
             let start = Instant::now();
             // let segment_limit_po2 = 22;
             let zk_env = ExecutorEnv::builder()
-                .write(&env).unwrap()
-                .write(&zkdb).unwrap()
+                .write(&env)
+                .unwrap()
+                .write(&zkdb)
+                .unwrap()
                 // .segment_limit_po2(segment_limit_po2)
                 // .session_limit(None)
                 .build()
                 .unwrap();
-            
-            
+
             let mut exec = ExecutorImpl::from_elf(zk_env, EVM_ELF).unwrap();
 
             let session = exec.run().unwrap();
-            
+
             // println!(
             //     "Executor ran in (roughly) {} cycles",
             //     session.segments.len() * (1 << segment_limit_po2)
@@ -171,7 +175,6 @@ impl EvmArgs {
                 let duration = start.elapsed();
                 println!("Time elapsed is: {:?}", duration);
             }
-            
         };
         Ok(())
     }

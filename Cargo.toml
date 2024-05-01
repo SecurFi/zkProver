@@ -10,8 +10,8 @@ members = [
 [workspace.package]
 version = "0.3.0"
 edition = "2021"
-homepage = "https://0xhacked.com/"
-repository = "https://github.com/0xHackedLabs/zkProver"
+homepage = "https://Secur.Fi/"
+repository = "https://github.com/SecurFi/zkProver"
 
 [workspace.dependencies]
 risc0-build = { version = "0.21" }

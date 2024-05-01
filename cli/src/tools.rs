@@ -1,22 +1,21 @@
-use std::io::Write;
-use eyre::{Result, bail};
-use clap::Parser;
+use bridge::{Env, ZkDb};
 use chains_evm::{
     compiler::compile_contract,
     opts::EvmOpts,
     runner::{create_db, POCRunner},
     setup::{deal_commit, DealRecord},
-    DEFAULT_CONTRACT_ADDRESS, DEFAULT_CALLER,
+    DEFAULT_CALLER, DEFAULT_CONTRACT_ADDRESS,
 };
-use bridge::{Env, ZkDb};
+use clap::Parser;
+use clio::{Input, Output};
 use ethers_core::types::{Address, U256};
 use ethers_solc::Artifact;
+use eyre::{bail, Result};
 use risc0_zkvm::{serde::to_vec, Receipt};
-use clio::{Output, Input};
+use std::io::Write;
 use zk_methods::EVM_ID;
 
 use crate::proof::Proof;
-
 
 #[derive(Parser, Debug)]
 pub struct PreArgs {
@@ -36,15 +35,13 @@ pub struct PreArgs {
     #[clap(short, long)]
     gas: Option<u64>,
 
-    /// Output file 
+    /// Output file
     #[clap(long, short, value_parser, default_value = "input.hex")]
     output: Output,
 
     #[clap(long, short, value_parser, default_value = "sketch_proof.bin")]
     proof: Output,
-
 }
-
 
 #[derive(Parser, Debug)]
 pub struct PackArgs {
@@ -58,8 +55,6 @@ pub struct PackArgs {
     output: Output,
 }
 
-
-
 impl PreArgs {
     pub async fn run(mut self) -> Result<()> {
         let contract = compile_contract(self.contract)?;
@@ -70,8 +65,14 @@ impl PreArgs {
 
         let env = evm_opts.evm_env().await;
 
-        let rpc_cache_dir = dirs_next::home_dir().expect("home dir not found").join(".0xhacked").join("cache").join("rpc");
-        let cache_path =  rpc_cache_dir.join(format!("{}", env.cfg.chain_id)).join(format!("{}.db",env.block.number));
+        let rpc_cache_dir = dirs_next::home_dir()
+            .expect("home dir not found")
+            .join(".SecurFi")
+            .join("cache")
+            .join("rpc");
+        let cache_path = rpc_cache_dir
+            .join(format!("{}", env.cfg.chain_id))
+            .join(format!("{}.db", env.block.number));
 
         let mut db = create_db(
             env.clone(),
@@ -89,7 +90,7 @@ impl PreArgs {
                 ..x.clone()
             })
             .collect();
-        
+
         if deal_records.len() > 0 {
             deal_commit(&mut db, &deal_records)?;
         }
@@ -122,7 +123,7 @@ impl PreArgs {
         let result = runner.run()?;
 
         db.flush_cache();
-        
+
         if !result.success {
             bail!("execution failed, {:?}", result.reason);
         }
@@ -150,13 +151,12 @@ impl PreArgs {
         env.tx = result.env.tx.clone();
         env.cfg.chain_id = result.env.cfg.chain_id.clone();
         env.cfg.spec_id = result.env.cfg.spec_id.clone();
-        
+
         let mut v8bytes: Vec<u8> = Vec::new();
         v8bytes.extend_from_slice(bytemuck::cast_slice(&to_vec(&env).unwrap()));
         v8bytes.extend_from_slice(bytemuck::cast_slice(&to_vec(&zkdb).unwrap()));
-        
+
         self.output.write_all(&v8bytes).unwrap();
-        
 
         let proof = Proof {
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -174,7 +174,6 @@ impl PreArgs {
 
 impl PackArgs {
     pub fn run(self) -> Result<()> {
-
         let mut proof = Proof::load(self.proof)?;
         let receipt: Receipt = bincode::deserialize_from(self.receipt)?;
         receipt.verify(proof.image_id)?;
