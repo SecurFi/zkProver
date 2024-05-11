@@ -1,5 +1,5 @@
 use clap::Parser;
-use clio::{Input, Output};
+use clio::{Input, OutputPath};
 use anyhow::Result;
 use std::io::Write;
 use alloy_provider::{Provider, ProviderBuilder};
@@ -33,10 +33,10 @@ pub struct PreArgs {
 
     /// Output file
     #[clap(long, short, value_parser, default_value = "input.hex")]
-    output: Output,
+    output: OutputPath,
 
     #[clap(long, short, value_parser, default_value = "sketch_proof.bin")]
-    proof: Output,
+    proof: OutputPath,
 }
 
 #[derive(Parser, Debug)]
@@ -48,11 +48,11 @@ pub struct PackArgs {
     proof: Input,
 
     #[clap(long, value_parser, default_value = "proof.bin")]
-    output: Output,
+    output: OutputPath,
 }
 
 impl PreArgs {
-    pub async fn run(mut self) -> Result<()> {
+    pub async fn run(self) -> Result<()> {
         let contract = compile_poc(self.poc)?;
         let poc_code_hash = contract.hash_slow();
 
@@ -86,7 +86,8 @@ impl PreArgs {
 
         let mut v8bytes: Vec<u8> = Vec::new();
         v8bytes.extend_from_slice(bytemuck::cast_slice(&to_vec(&exploit_input).unwrap()));
-        self.output.write_all(&v8bytes).unwrap();
+        let mut output = self.output.create()?;
+        output.write_all(&v8bytes)?;
 
         let spec_name: &'static str = chain_spec.spec_id.into();
 
@@ -100,8 +101,9 @@ impl PreArgs {
             deals: self.deal.unwrap_or_default(),
             receipt: None,
         };
-        proof.save(self.output)?;
-
+        let output = self.proof.create()?;
+        proof.save(output)?;
+        
         return Ok(());
     }
 }
@@ -112,7 +114,8 @@ impl PackArgs {
         let receipt: Receipt = bincode::deserialize_from(self.receipt)?;
         receipt.verify(proof.image_id)?;
         proof.receipt = Some(receipt);
-        proof.save(self.output)?;
+        let output = self.output.create()?;
+        proof.save(output)?;
         return Ok(());
     }
 }

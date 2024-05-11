@@ -1,5 +1,5 @@
 use clap::Parser;
-use clio::Output;
+use clio::OutputPath;
 use anyhow::Result;
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types::BlockId;
@@ -34,7 +34,7 @@ pub struct EvmArgs {
 
     /// Output file
     #[clap(long, short, value_parser, default_value = "proof.bin")]
-    output: Output,
+    output: OutputPath,
 }
 
 impl EvmArgs {
@@ -103,7 +103,8 @@ impl EvmArgs {
                 deals: self.deal.unwrap_or_default(),
                 receipt: Some(receipt),
             };
-            proof.save(self.output)?;
+            let output = self.output.create()?;
+            proof.save(output)?;
             println!("generate zk proof success, time: {:?}", duration);
         }
         Ok(())
