@@ -9,7 +9,7 @@ use risc0_zkvm::Receipt;
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Proof {
     pub version: String,
-    pub image_id: [u32; 8],
+    pub image_id: String,
     pub chain_id: u64,
     pub spec_id: String,
     pub block_number: u64,

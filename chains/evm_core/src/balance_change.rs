@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 use bridge::DEFAULT_CONTRACT_ADDRESS;
 use revm::{
     db::CacheDB,
-    primitives::{AccountInfo, Address, Bytecode, ExecutionResult, State, TransactTo, B256, U256},
+    primitives::{AccountInfo, Address, Bytecode, ExecutionResult, State, TransactTo, B256, KECCAK_EMPTY, U256},
     DatabaseCommit, DatabaseRef, Evm,
 };
 use serde::{Deserialize, Serialize};
@@ -39,7 +39,11 @@ impl<'a, T: DatabaseRef> DatabaseRef for SafeStorageDB<'a, T> {
             None => {
                 match self.db.basic_ref(address) {
                     Ok(account) => {
-                        Ok(account)
+                        let mut account = account.unwrap();
+                        if address == DEFAULT_CONTRACT_ADDRESS {
+                            account.code_hash = KECCAK_EMPTY;
+                        }
+                        Ok(Some(account))
                     },
                     Err(_) => {
                         Ok(Some(AccountInfo::default()))
@@ -84,7 +88,6 @@ pub fn batch_get_token_balance<T: DatabaseRef>(
     let bytecode = Bytecode::new_raw(BALANCE_CHECKER_CONTRACT_CODE.into());
     let account = AccountInfo::new(U256::ZERO, 0, bytecode.hash_slow(), bytecode);
     db.insert_account_info(contract_address, account);
-    db.insert_account_info(DEFAULT_CONTRACT_ADDRESS, AccountInfo::default());
     let mut evm = Evm::builder()
         .with_ref_db(db)
         .modify_tx_env(|tx| {

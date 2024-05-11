@@ -90,10 +90,11 @@ impl PreArgs {
         output.write_all(&v8bytes)?;
 
         let spec_name: &'static str = chain_spec.spec_id.into();
+        let image_id = hex::encode(EXPLOIT_ID.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>());
 
         let proof = Proof {
             version: env!("CARGO_PKG_VERSION").to_string(),
-            image_id: EXPLOIT_ID,
+            image_id: image_id,
             chain_id: chain_id,
             spec_id: spec_name.to_string(),
             block_number: block_number,
@@ -112,7 +113,6 @@ impl PackArgs {
     pub fn run(self) -> Result<()> {
         let mut proof = Proof::load(self.proof)?;
         let receipt: Receipt = bincode::deserialize_from(self.receipt)?;
-        receipt.verify(proof.image_id)?;
         proof.receipt = Some(receipt);
         let output = self.output.create()?;
         proof.save(output)?;

@@ -1,6 +1,7 @@
 use clap::Parser;
 use clio::{Input, Output};
 use anyhow::{Result, bail};
+use hex::FromHex;
 use revm_primitives::db::DatabaseRef;
 use serde::{Deserialize, Serialize};
 use alloy_rpc_types::BlockId;
@@ -14,6 +15,7 @@ use chains_evm_core::{
     deal::DealRecord,
     state_diff::{compute_state_diff, StateDiff}
 };
+use risc0_zkvm::sha::Digest;
 use bridge::ExploitOutput;
 use crate::proof::Proof;
 
@@ -35,7 +37,7 @@ pub struct VerifyArgs {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct VerifyResult {
     pub version: String,
-    pub image_id: [u32; 8],
+    pub image_id: String,
     pub chain_id: u64,
     pub spec_id: String,
     pub block_number: u64,
@@ -48,7 +50,8 @@ pub struct VerifyResult {
 
 
 async fn verify(proof: Proof, rpc_url: String) -> Result<VerifyResult> {
-    proof.receipt.clone().unwrap().verify(proof.image_id)?;
+    let image_id = Digest::from_hex(proof.image_id.clone())?;
+    proof.receipt.clone().unwrap().verify(image_id)?;
 
     let output: ExploitOutput = proof.receipt.unwrap().journal.decode()?;
     let block_id = BlockId::number(proof.block_number);
@@ -111,6 +114,7 @@ async fn verify(proof: Proof, rpc_url: String) -> Result<VerifyResult> {
     let state_diff = compute_state_diff(&output.state, &output.input.db);
 
     let accounts: Vec<Address> = output.input.db.accounts.keys().cloned().collect();
+
     let asset_change = compute_asset_change(&accounts, &output.input.db, output.state)?;
 
     Ok(VerifyResult {

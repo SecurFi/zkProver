@@ -55,7 +55,7 @@ impl EvmArgs {
         let block_number = block.header.number.unwrap();
         println!("Chain: {:?}", chain_id);
         println!("Block Number: {:?}", block_number);
-
+        println!("Poc Code Hash: {:?}", poc_code_hash);
         let rpc_cache_dir = dirs_next::home_dir().expect("home dir not found").join(".securfi").join("cache").join("rpc");
         let cache_path =  rpc_cache_dir.join(format!("{}", chain_id)).join(format!("{}.json", block.header.number.unwrap()));
 
@@ -92,10 +92,10 @@ impl EvmArgs {
             let duration = start.elapsed();
 
             let spec_name: &'static str = chain_spec.spec_id.into();
-
+            let image_id = hex::encode(EXPLOIT_ID.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>());
             let proof = Proof {
                 version: env!("CARGO_PKG_VERSION").to_string(),
-                image_id: EXPLOIT_ID,
+                image_id: image_id,
                 chain_id: chain_id,
                 spec_id: spec_name.to_string(),
                 block_number: block_number,

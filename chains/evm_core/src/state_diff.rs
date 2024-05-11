@@ -78,10 +78,13 @@ pub fn compute_state_diff(state: &State, db: &MemDB) -> StateDiff {
         if account.is_selfdestructed() {
             balance_delta = Delta::Removed(before_account.info.balance);
             nonce_delta = Delta::Removed(before_account.info.nonce);
-            let acc = state_diff.entry(address.clone()).or_default();
-            acc.balance = balance_delta;
-            acc.nonce = nonce_delta;
-            continue;
+        } else {
+            if account.info.balance != before_account.info.balance {
+                balance_delta = Delta::Changed(ChangedType { from: before_account.info.balance, to: account.info.balance });
+            }
+            if account.info.nonce != before_account.info.nonce {
+                nonce_delta = Delta::Changed(ChangedType { from: before_account.info.nonce, to: account.info.nonce });
+            }
         }
 
         for (key, sslot) in account.storage.iter() {
@@ -96,6 +99,7 @@ pub fn compute_state_diff(state: &State, db: &MemDB) -> StateDiff {
                 })
             );
         }
+        
         if let Delta::Unchanged = balance_delta {
             if let Delta::Unchanged = nonce_delta {
                 if storage_delta.is_empty() {

@@ -62,10 +62,6 @@ We highly recommend you start hacking from [PoC demos](https://github.com/SecurF
 ## Documentation
 [Documentation for SecurFi](https://docs.SecurFi.com)
 
-## todo
-1. Maintain an in-house version of [revm](https://github.com/bluealloy/revm), simplify the code, remove unnecessary features, optimize data structures to make it more zk-friendly
-2. Multi-chain support
-3. Based on Helios, compute asset changes in our zkVerify solution to provide a safe and open-source trustless localRPC node service
 
 ## Acknowledgements
 Thanks to the contributions of [foundry](https://github.com/foundry-rs/foundry), [revm](https://github.com/bluealloy/revm), [reth](https://github.com/paradigmxyz/reth), [ethers-rs](https://github.com/gakonst/ethers-rs) and [RISC Zero](https://github.com/risc0/risc0) to crypto. We're grateful for these awesome projects.
