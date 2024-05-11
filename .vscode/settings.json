@@ -4,6 +4,6 @@
     },
     "rust-analyzer.linkedProjects": [
         "./Cargo.toml",
-        "./zk-methods/guest/Cargo.toml"
+        "./guests/exploit/Cargo.toml"
     ]
 }

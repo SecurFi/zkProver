@@ -1,25 +1,21 @@
-use bridge::{Env, ZkDb};
-use chains_evm::{
-    compiler::compile_contract,
-    opts::EvmOpts,
-    runner::{create_db, POCRunner},
-    setup::{deal_commit, DealRecord},
-    DEFAULT_CALLER, DEFAULT_CONTRACT_ADDRESS,
-};
 use clap::Parser;
 use clio::{Input, Output};
-use ethers_core::types::{Address, U256};
-use ethers_solc::Artifact;
-use eyre::{bail, Result};
-use risc0_zkvm::{serde::to_vec, Receipt};
+use anyhow::Result;
 use std::io::Write;
-use zk_methods::EVM_ID;
-
+use alloy_provider::{Provider, ProviderBuilder};
+use alloy_rpc_types::BlockId;
+use alloy_primitives::U256;
+use chains_evm_core::{
+    block::BlockHeader, db::{BlockchainDbMeta, ChainSpec, JsonBlockCacheDB}, deal::DealRecord, poc_compiler::compile_poc, preflight::build_input
+};
+use risc0_zkvm::{serde::to_vec, Receipt};
 use crate::proof::Proof;
+use guests::EXPLOIT_ID;
+
 
 #[derive(Parser, Debug)]
 pub struct PreArgs {
-    contract: String,
+    poc: String,
 
     #[clap(short, long)]
     rpc_url: String,
@@ -57,116 +53,54 @@ pub struct PackArgs {
 
 impl PreArgs {
     pub async fn run(mut self) -> Result<()> {
-        let contract = compile_contract(self.contract)?;
-        let abi = contract.get_abi().unwrap().to_owned();
-        let mut evm_opts = EvmOpts::default();
-        evm_opts.fork_url = Some(self.rpc_url.clone());
-        evm_opts.fork_block_number = self.block_number;
+        let contract = compile_poc(self.poc)?;
+        let poc_code_hash = contract.hash_slow();
 
-        let env = evm_opts.evm_env().await;
+        let provider = ProviderBuilder::new()
+            .on_http(self.rpc_url.as_str().try_into()?)?;
 
-        let rpc_cache_dir = dirs_next::home_dir()
-            .expect("home dir not found")
-            .join(".SecurFi")
-            .join("cache")
-            .join("rpc");
-        let cache_path = rpc_cache_dir
-            .join(format!("{}", env.cfg.chain_id))
-            .join(format!("{}.db", env.block.number));
+        let block_id = match self.block_number {
+            Some(n) => BlockId::number(n),
+            None => BlockId::safe()
+        };
+        let chain_id = provider.get_chain_id().await?;
+        let block = provider.get_block(block_id, false).await?.expect("could not found block");
+        let block_number = block.header.number.unwrap();
 
-        let mut db = create_db(
-            env.clone(),
-            self.rpc_url.clone(),
-            cache_path.to_str().map(|x| x.into()),
-        )
-        .await;
+        let rpc_cache_dir = dirs_next::home_dir().expect("home dir not found").join(".securfi").join("cache").join("rpc");
+        let cache_path =  rpc_cache_dir.join(format!("{}", chain_id)).join(format!("{}.json", block.header.number.unwrap()));
 
-        let deal_records: Vec<DealRecord> = self
-            .deal
-            .unwrap_or_default()
-            .iter()
-            .map(|x| DealRecord {
-                address: DEFAULT_CONTRACT_ADDRESS,
-                ..x.clone()
-            })
-            .collect();
+        let header: BlockHeader = block.header.try_into()?;
 
-        if deal_records.len() > 0 {
-            deal_commit(&mut db, &deal_records)?;
-        }
+        let chain_spec = ChainSpec::mainnet();
+        let meta = BlockchainDbMeta {
+            chain_spec: chain_spec.clone(), // currently only supports mainnet and shanghai
+            header: header.clone(),
+        };
+        let db = JsonBlockCacheDB::new(&provider, meta, Some(cache_path));
 
-        let mut initial_balance = U256::zero();
-        for record in deal_records.iter() {
-            if record.token == Address::zero() {
-                initial_balance = record.balance;
-                break;
-            }
-        }
+        // todo: add deal
+        let initial_balance = U256::ZERO;
+        let exploit_input = build_input(contract, header, &db, initial_balance)?;
 
-        let deployed_bytecode = contract.get_deployed_bytecode().unwrap().into_owned();
-        let mut runner = POCRunner::new(
-            env.clone(),
-            &mut db,
-            deployed_bytecode
-                .bytecode
-                .unwrap()
-                .object
-                .into_bytes()
-                .unwrap(),
-            &abi,
-            Some(initial_balance),
-            Some(DEFAULT_CALLER),
-            Some(DEFAULT_CONTRACT_ADDRESS),
-        );
-
-        runner.setup();
-        let result = runner.run()?;
-
-        db.flush_cache();
-
-        if !result.success {
-            bail!("execution failed, {:?}", result.reason);
-        }
-        println!("tx run success, gas used: {:?}", result.gas_used);
-
-        if let Some(gas) = self.gas {
-            if gas < result.gas_used {
-                bail!("gas used exceed, limit: {}", gas);
-            }
-        }
-
-        let mut zkdb = ZkDb::default();
-        db.database()
-            .accounts
-            .iter()
-            .for_each(|(address, account)| {
-                zkdb.accounts.insert(*address, account.info.clone());
-                zkdb.storage.insert(*address, account.storage.clone());
-            });
-        zkdb.block_hashes = db.database().block_hashes.clone();
-
-        let mut env = Env::default();
-
-        env.block = result.env.block.clone();
-        env.tx = result.env.tx.clone();
-        env.cfg.chain_id = result.env.cfg.chain_id.clone();
-        env.cfg.spec_id = result.env.cfg.spec_id.clone();
 
         let mut v8bytes: Vec<u8> = Vec::new();
-        v8bytes.extend_from_slice(bytemuck::cast_slice(&to_vec(&env).unwrap()));
-        v8bytes.extend_from_slice(bytemuck::cast_slice(&to_vec(&zkdb).unwrap()));
-
+        v8bytes.extend_from_slice(bytemuck::cast_slice(&to_vec(&exploit_input).unwrap()));
         self.output.write_all(&v8bytes).unwrap();
+
+        let spec_name: &'static str = chain_spec.spec_id.into();
 
         let proof = Proof {
             version: env!("CARGO_PKG_VERSION").to_string(),
-            image_id: EVM_ID,
-            chain: "ethereum".to_string(),
-            raw_metadata: contract.raw_metadata.unwrap(),
-            deals: deal_records,
+            image_id: EXPLOIT_ID,
+            chain_id: chain_id,
+            spec_id: spec_name.to_string(),
+            block_number: block_number,
+            poc_code_hash: poc_code_hash,
+            deals: self.deal.unwrap_or_default(),
             receipt: None,
         };
-        proof.save(&mut self.proof).unwrap();
+        proof.save(self.output)?;
 
         return Ok(());
     }

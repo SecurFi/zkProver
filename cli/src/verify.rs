@@ -1,23 +1,21 @@
-use std::collections::HashSet;
-use std::ops::{Deref, DerefMut};
-use std::collections::HashMap;
-use chains_evm::balance::{get_asset_change_form_db_state, AssetChange};
 use clap::Parser;
 use clio::{Input, Output};
-use eyre::Result;
+use anyhow::{Result, bail};
+use revm_primitives::db::DatabaseRef;
 use serde::{Deserialize, Serialize};
-use bridge::{EvmResult, TransactTo, B160, U256 as rU256, B256, KECCAK_EMPTY};
-use chains_evm::{
-    fork::database::DatabaseRef,
-    opts::EvmOpts,
-    runner::create_db,
-    setup::{deal, DealRecord},
-    utils::ru256_to_u256,
-    Address,
+use alloy_rpc_types::BlockId;
+use alloy_provider::{Provider, ProviderBuilder};
+use alloy_primitives::{B256, U256, Address};
+use bridge::{DEFAULT_CONTRACT_ADDRESS, DEFAULT_CALLER};
+use chains_evm_core::{
+    balance_change::{compute_asset_change, AssetChange},
+    block::BlockHeader,
+    db::{BlockchainDbMeta, ChainSpec, JsonBlockCacheDB},
+    deal::DealRecord,
+    state_diff::{compute_state_diff, StateDiff}
 };
+use bridge::ExploitOutput;
 use crate::proof::Proof;
-use zk_methods::EVM_ID;
-
 
 
 #[derive(Parser, Debug)]
@@ -34,228 +32,98 @@ pub struct VerifyArgs {
 }
 
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ChangedType<T> {
-    pub from: T,
-    pub to: T,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-pub enum Delta<T> {
-    #[default]
-    #[serde(rename = "=")]
-    Unchanged,
-    #[serde(rename = "+")]
-    Added(T),
-    #[serde(rename = "-")]
-    Removed(T),
-    #[serde(rename = "*")]
-    Changed(ChangedType<T>),
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-pub struct AccountDiff {
-    pub balance: Delta<rU256>,
-    pub nonce: Delta<u64>,
-    pub code_hash: Delta<B256>,
-    pub storage: HashMap<rU256, Delta<rU256>>,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct StateDiff(pub HashMap<Address, AccountDiff>);
-
-impl Deref for StateDiff {
-    type Target = HashMap<Address, AccountDiff>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for StateDiff {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct VerifyResult {
     pub version: String,
-    pub chain: String,
+    pub image_id: [u32; 8],
+    pub chain_id: u64,
+    pub spec_id: String,
+    pub block_number: u64,
+    pub poc_code_hash: B256,
     pub deals: Vec<DealRecord>,
     pub state_diff: StateDiff,
     pub asset_change: Vec<AssetChange>,
-    pub block_number: u64,
     pub gas_used: u64,
 }
 
 
 async fn verify(proof: Proof, rpc_url: String) -> Result<VerifyResult> {
-    let evm_result: EvmResult = proof.receipt.unwrap().journal.decode()?;
+    proof.receipt.clone().unwrap().verify(proof.image_id)?;
 
-    let block_number = ru256_to_u256(evm_result.env.block.number).as_u64();
-    let mut evm_opts = EvmOpts::default();
-    evm_opts.fork_url = Some(rpc_url.clone());
-    evm_opts.fork_block_number = Some(block_number);
-    let mut env = evm_opts.evm_env().await;
-    let db = create_db(env.clone(), rpc_url.clone(), None).await;
+    let output: ExploitOutput = proof.receipt.unwrap().journal.decode()?;
+    let block_id = BlockId::number(proof.block_number);
+    let provider = ProviderBuilder::new()
+            .on_http(rpc_url.as_str().try_into()?)?;
 
-    env.block.basefee = rU256::ZERO;
-    if evm_result.env.block != evm_result.env.block {
-        eyre::bail!("Block info check failed")
+    let block = provider.get_block(block_id, false).await?.expect("could not found block");
+    let header: BlockHeader = block.header.try_into()?;
+
+    if output.input.block_env != header.into_block_env() {
+        bail!("block env mismatch")
     }
-    let contract_address = match evm_result.env.tx.transact_to {
-        TransactTo::Call(address) => address,
-        _ => panic!("Unexpected transact_to"),
+    
+    // verify db
+    let rpc_cache_dir = dirs_next::home_dir().expect("home dir not found").join(".securfi").join("cache").join("rpc");
+    let cache_path =  rpc_cache_dir.join(format!("{}", proof.chain_id)).join(format!("{}.json", proof.block_number));
+    let chain_spec = ChainSpec::mainnet();
+    let meta = BlockchainDbMeta {
+        chain_spec: chain_spec.clone(), // currently only supports mainnet and shanghai
+        header: header,
     };
-    let caller = evm_result.env.tx.caller;
+    let rpc_db = JsonBlockCacheDB::new(&provider, meta, Some(cache_path));
+    let initial_balance = U256::ZERO;
 
-    // check account
-    let mut initial_balance = rU256::ZERO;
-    for record in proof.deals.iter() {
-        if record.token == Address::zero() {
-            initial_balance = record.balance.into();
-            break;
-        }
-    }
-    if evm_result
-        .db
-        .accounts
-        .get(&contract_address)
-        .unwrap()
-        .balance
-        != initial_balance
-    {
-        eyre::bail!("Contract init balance check failed")
-    }
-    if evm_result.db.accounts.get(&caller).unwrap().balance != rU256::ZERO {
-        eyre::bail!("Caller init balance check failed")
-    }
-    for (address, account) in evm_result.db.accounts.iter() {
-        if address != &contract_address && address != &caller {
-            let trust_account = db.basic(*address).unwrap().expect("account not found");
-            if trust_account != *account {
-                eyre::bail!("Account info check failed")
+    for (address, acc_storage) in output.input.db.accounts.iter() {
+        let address = address.clone();
+        if address == DEFAULT_CONTRACT_ADDRESS {
+            if acc_storage.info.balance != initial_balance {
+                bail!("balance is not correct")
             }
-        }
-    }
-
-    // check storage
-    let deal_address_slot: HashMap<B160, HashSet<rU256>> = HashMap::new();
-    let deal_state_change = deal(&db, &proof.deals)?;
-    for (address, account) in deal_state_change.iter() {
-        for (key, sslot) in account.storage.iter() {
-            if sslot.is_changed() {
-                if *evm_result
-                    .db
-                    .storage
-                    .get(address)
-                    .unwrap()
-                    .get(key)
-                    .unwrap()
-                    != sslot.present_value
-                {
-                    eyre::bail!("deal info check failed")
-                }
+            if acc_storage.info.code_hash != proof.poc_code_hash {
+                bail!("code hash is not correct")
             }
-        }
-    }
-    for (address, storage_info) in evm_result.db.storage.iter() {
-        for (slot, value) in storage_info.iter() {
-            if deal_address_slot.contains_key(address)
-                && deal_address_slot.get(address).unwrap().contains(slot)
-            {
-                continue;
-            }
-            let trust_value = db.storage(*address, *slot).expect("storage not found");
-            if trust_value != *value {
-                eyre::bail!("Storage info check failed")
-            }
-        }
-    }
-
-    let mut state_diff = StateDiff::default();
-
-    for (address, account) in evm_result.state.iter() {
-        let mut nonce_delta: Delta<u64> = Delta::default();
-        let mut balance_delta: Delta<rU256> = Delta::default();
-        let mut storage_delta: HashMap<rU256, Delta<rU256>> = HashMap::new();
-        let before_account = evm_result.db.accounts.get(address);
-        if before_account.is_none() || before_account.unwrap().is_empty() {
-            balance_delta = Delta::Added(account.info.balance);
-            nonce_delta = Delta::Added(account.info.nonce);
-            let acc = state_diff.entry((*address).into()).or_default();
-            acc.balance = balance_delta;
-            acc.nonce = nonce_delta;
-            if account.info.code_hash != KECCAK_EMPTY {
-                acc.code_hash = Delta::Added(account.info.code_hash);
-            }
-            
             continue;
         }
-        let before_account = before_account.unwrap();
-        if account.is_destroyed {
-            balance_delta = Delta::Removed(before_account.balance);
-            nonce_delta = Delta::Removed(before_account.nonce);
-            let acc = state_diff.entry((*address).into()).or_default();
-            acc.balance = balance_delta;
-            acc.nonce = nonce_delta;
+        if address == DEFAULT_CALLER {
+            if acc_storage.info.balance != initial_balance {
+                bail!("balance is not correct")
+            }
             continue;
         }
-
-        for (key, sslot) in account.storage.iter() {
-            if !sslot.is_changed() {
-                continue;
-            }
-            let before_value = evm_result.db.storage.get(address);
-            if before_value.is_none() {
-                storage_delta.insert(*key, Delta::Added(sslot.present_value));
-            } else {
-                storage_delta.insert(
-                    *key,
-                    Delta::Changed(ChangedType {
-                        from: sslot.original_value,
-                        to: sslot.present_value,
-                    }),
-                );
+        let info = rpc_db.basic_ref(address)?.unwrap();
+        if info != acc_storage.info {
+            bail!("account info is not correct")
+        }
+        for (key, value) in acc_storage.storage.iter() {
+            let slot = rpc_db.storage_ref(address, *key)?;
+            if slot != *value {
+                bail!("storage slot is not correct")
             }
         }
-        if let Delta::Unchanged = balance_delta {
-            if let Delta::Unchanged = nonce_delta {
-                if storage_delta.is_empty() {
-                    continue;
-                }
-            }
-        }
-        let acc = state_diff.entry((*address).into()).or_default();
-        acc.balance = balance_delta;
-        acc.nonce = nonce_delta;
-        acc.storage = storage_delta;
     }
 
-    let accounts: Vec<Address> = evm_result
-        .db
-        .accounts
-        .keys()
-        .map(|x| x.clone().into())
-        .collect();
-    // fix the code of account in evm_result.state
-    let mut state = evm_result.state;
-    for (address, account) in state.iter_mut() {
-        let code = evm_result.db.basic(*address).unwrap().unwrap().code;
-        account.info.code = code;
-        
+    for (block_number, block_hash) in output.input.db.block_hashes.iter() {
+        if *block_hash != rpc_db.block_hash_ref(U256::from(*block_number))? {
+            bail!("block hash is not correct")
+        }
     }
-    let asset_change = get_asset_change_form_db_state(&accounts, &evm_result.db, state)?;
+
+    let state_diff = compute_state_diff(&output.state, &output.input.db);
+
+    let accounts: Vec<Address> = output.input.db.accounts.keys().cloned().collect();
+    let asset_change = compute_asset_change(&accounts, &output.input.db, output.state)?;
+
     Ok(VerifyResult {
         version: proof.version,
-        chain: proof.chain,
+        image_id: proof.image_id,
+        chain_id: proof.chain_id,
+        spec_id: proof.spec_id,
+        block_number: proof.block_number,
+        poc_code_hash: proof.poc_code_hash,
         deals: proof.deals,
+        gas_used: output.gas_used,
         state_diff: state_diff,
         asset_change: asset_change,
-        block_number: block_number,
-        gas_used: evm_result.gas_used,
     })
 }
 
@@ -263,7 +131,6 @@ async fn verify(proof: Proof, rpc_url: String) -> Result<VerifyResult> {
 impl VerifyArgs {
     pub async fn run(self) -> Result<()> {
         let proof = Proof::load(self.path)?;
-        proof.receipt.clone().unwrap().verify(EVM_ID)?;
         let result = verify(proof, self.rpc_url).await?;
 
         serde_json::to_writer(self.output, &result)?;

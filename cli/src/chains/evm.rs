@@ -1,34 +1,30 @@
-use crate::proof::Proof;
-use bridge::{Env, ZkDb};
-use chains_evm::{
-    compiler::compile_contract,
-    opts::EvmOpts,
-    runner::{create_db, POCRunner},
-    setup::{deal_commit, DealRecord},
-    DEFAULT_CALLER, DEFAULT_CONTRACT_ADDRESS,
-};
 use clap::Parser;
 use clio::Output;
-use ethers_core::types::{Address, U256};
-use ethers_solc::Artifact;
-use eyre::{bail, Result};
+use anyhow::Result;
+use alloy_provider::{Provider, ProviderBuilder};
+use alloy_rpc_types::BlockId;
+use alloy_primitives::U256;
+use chains_evm_core::{
+    block::BlockHeader, db::{BlockchainDbMeta, ChainSpec, JsonBlockCacheDB}, 
+    deal::DealRecord, poc_compiler::compile_poc, preflight::build_input
+};
 use risc0_zkvm::{ExecutorEnv, ExecutorImpl};
+use guests::{EXPLOIT_ID, EXPLOIT_ELF};
 use std::time::Instant;
 
-#[cfg(feature = "prover")]
-use zk_methods::{EVM_ELF, EVM_ID};
+use crate::proof::Proof;
 
-#[derive(Parser, Debug)] // requires `derive` feature
+#[derive(Parser, Debug)]
 pub struct EvmArgs {
-    /// The Exploit contract
-    contract: String,
+    /// The poc contract
+    poc: String,
 
     #[clap(short, long)]
     rpc_url: String,
 
     #[clap(short, long)]
     block_number: Option<u64>,
-    /// Set the balances of the exploit contract.
+    /// Set the token balances of the poc contract.
     /// Examples: 1ether, 0xdac17f958d2ee523a2206206994597c13d831ec7:10gwei
     #[clap(short, long)]
     deal: Option<Vec<DealRecord>>,
@@ -43,149 +39,74 @@ pub struct EvmArgs {
 
 impl EvmArgs {
     /// Executes the `evm` subcommand.
-    pub async fn run(mut self) -> Result<()> {
-        let contract = compile_contract(self.contract)?;
-        let abi = contract.get_abi().unwrap().to_owned();
-        let mut evm_opts = EvmOpts::default();
-        evm_opts.fork_url = Some(self.rpc_url.clone());
-        evm_opts.fork_block_number = self.block_number;
+    pub async fn run(self) -> Result<()> {
+        let contract = compile_poc(self.poc)?;
+        let poc_code_hash = contract.hash_slow();
 
-        let env: Env = evm_opts.evm_env().await;
-        let rpc_cache_dir = dirs_next::home_dir()
-            .expect("home dir not found")
-            .join(".SecurFi")
-            .join("cache")
-            .join("rpc");
-        let cache_path = rpc_cache_dir
-            .join(format!("{}", env.cfg.chain_id))
-            .join(format!("{}.db", env.block.number));
+        let provider = ProviderBuilder::new()
+            .on_http(self.rpc_url.as_str().try_into()?)?;
 
-        let mut db = create_db(
-            env.clone(),
-            self.rpc_url.clone(),
-            cache_path.to_str().map(|x| x.into()),
-        )
-        .await;
-
-        let deal_records: Vec<DealRecord> = self
-            .deal
-            .unwrap_or_default()
-            .iter()
-            .map(|x| DealRecord {
-                address: DEFAULT_CONTRACT_ADDRESS,
-                ..x.clone()
-            })
-            .collect();
-
-        if deal_records.len() > 0 {
-            deal_commit(&mut db, &deal_records)?;
-        }
-
-        let mut initial_balance = U256::zero();
-        for record in deal_records.iter() {
-            if record.token == Address::zero() {
-                initial_balance = record.balance;
-                break;
-            }
-        }
-
-        let deployed_bytecode = contract.get_deployed_bytecode().unwrap().into_owned();
-        let mut runner = POCRunner::new(
-            env.clone(),
-            &mut db,
-            deployed_bytecode
-                .bytecode
-                .unwrap()
-                .object
-                .into_bytes()
-                .unwrap(),
-            &abi,
-            Some(initial_balance),
-            Some(DEFAULT_CALLER),
-            Some(DEFAULT_CONTRACT_ADDRESS),
-        );
-
-        runner.setup();
-        let result = runner.run()?;
-
-        db.flush_cache();
-
-        if !result.success {
-            bail!("execution failed, {:?}", result.reason);
-        }
-
-        println!("tx run success, gas used: {:?}", result.gas_used);
-        let mut zkdb = ZkDb::default();
-        db.database()
-            .accounts
-            .iter()
-            .for_each(|(address, account)| {
-                zkdb.accounts.insert(*address, account.info.clone());
-                zkdb.storage.insert(*address, account.storage.clone());
-            });
-        zkdb.block_hashes = db.database().block_hashes.clone();
-
-        let mut env = Env::default();
-
-        env.block = result.env.block.clone();
-        env.tx = result.env.tx.clone();
-        env.cfg.chain_id = result.env.cfg.chain_id.clone();
-        env.cfg.spec_id = result.env.cfg.spec_id.clone();
-
-        let evm_id: Vec<u8> = EVM_ID.iter().flat_map(|x| x.to_le_bytes()).collect();
-        #[cfg(feature = "prover")]
-        {
-            let start = Instant::now();
-            // let segment_limit_po2 = 22;
-            let zk_env = ExecutorEnv::builder()
-                .write(&env)
-                .unwrap()
-                .write(&zkdb)
-                .unwrap()
-                // .segment_limit_po2(segment_limit_po2)
-                // .session_limit(None)
-                .build()
-                .unwrap();
-
-            let mut exec = ExecutorImpl::from_elf(zk_env, EVM_ELF).unwrap();
-
-            let session = exec.run().unwrap();
-
-            // println!(
-            //     "Executor ran in (roughly) {} cycles",
-            //     session.segments.len() * (1 << segment_limit_po2)
-            // );
-
-            if !self.dry_run {
-                println!(
-                    "starting generate zk proof, image id: {}",
-                    hex::encode(evm_id)
-                );
-                let receipt = session.prove().unwrap();
-                receipt.verify(EVM_ID)?;
-                let proof = Proof {
-                    version: env!("CARGO_PKG_VERSION").to_string(),
-                    image_id: EVM_ID,
-                    chain: "ethereum".to_string(),
-                    raw_metadata: contract.raw_metadata.unwrap(),
-                    deals: deal_records,
-                    receipt: Some(receipt),
-                };
-                proof.save(&mut self.output).unwrap();
-                let duration = start.elapsed();
-                println!("Time elapsed is: {:?}", duration);
-            }
+        let block_id = match self.block_number {
+            Some(n) => BlockId::number(n),
+            None => BlockId::safe()
         };
+        let chain_id = provider.get_chain_id().await?;
+        let block = provider.get_block(block_id, false).await?.expect("could not found block");
+        let block_number = block.header.number.unwrap();
+        println!("Chain: {:?}", chain_id);
+        println!("Block Number: {:?}", block_number);
+
+        let rpc_cache_dir = dirs_next::home_dir().expect("home dir not found").join(".securfi").join("cache").join("rpc");
+        let cache_path =  rpc_cache_dir.join(format!("{}", chain_id)).join(format!("{}.json", block.header.number.unwrap()));
+
+        let header: BlockHeader = block.header.try_into()?;
+
+        let chain_spec = ChainSpec::mainnet();
+        let meta = BlockchainDbMeta {
+            chain_spec: chain_spec.clone(), // currently only supports mainnet and shanghai
+            header: header.clone(),
+        };
+        let db = JsonBlockCacheDB::new(&provider, meta, Some(cache_path));
+
+        // todo: add deal
+        let initial_balance = U256::ZERO;
+        let exploit_input = build_input(contract, header, &db, initial_balance)?;
+
+        let zk_env = ExecutorEnv::builder()
+            .write(&exploit_input)?
+            .build()?;
+        
+        let mut exec = ExecutorImpl::from_elf(zk_env, EXPLOIT_ELF)?;
+        let session = exec.run()?;
+        let evm_id: Vec<u8> = EXPLOIT_ID.iter().flat_map(|x| x.to_le_bytes()).collect();
+
+        
+        if !self.dry_run {
+            println!(
+                "starting generate zk proof, image id: {}",
+                hex::encode(evm_id)
+            );
+            let start = Instant::now();
+            let receipt = session.prove()?;
+            let _ = receipt.verify(EXPLOIT_ID);
+            let duration = start.elapsed();
+
+            let spec_name: &'static str = chain_spec.spec_id.into();
+
+            let proof = Proof {
+                version: env!("CARGO_PKG_VERSION").to_string(),
+                image_id: EXPLOIT_ID,
+                chain_id: chain_id,
+                spec_id: spec_name.to_string(),
+                block_number: block_number,
+                poc_code_hash: poc_code_hash,
+                deals: self.deal.unwrap_or_default(),
+                receipt: Some(receipt),
+            };
+            proof.save(self.output)?;
+            println!("generate zk proof success, time: {:?}", duration);
+        }
         Ok(())
     }
 }
 
-// const NULL_SEGMENT_REF: NullSegmentRef = NullSegmentRef {};
-// #[derive(Serialize, Deserialize)]
-// struct NullSegmentRef {}
-
-// impl SegmentRef for NullSegmentRef {
-//     fn resolve(&self) -> anyhow::Result<Segment> {
-//         unimplemented!()
-//     }
-// }
