@@ -4,7 +4,7 @@ set -e
 echo Installing SecurFi zkProver...
 
 BASE_DIR=${XDG_CONFIG_HOME:-$HOME}
-APP_DIR=${APP_DIR-"$BASE_DIR/.SecurFi"}
+APP_DIR=${APP_DIR-"$BASE_DIR/.securfi"}
 BIN_DIR="$APP_DIR/bin"
 
 mkdir -p $BIN_DIR
