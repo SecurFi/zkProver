@@ -12,7 +12,7 @@ curl -L https://install.SecurFi.com | bash
 
 > If you're using MacOS, please make sure you have installed Xcode, `xcode-select --install` and run `xcrun metal` successfully.
 
-If you encounter any errors, please contact me via [Telegram](https://t.me/SecurFi).
+If you encounter any errors, please contact me via [Telegram](https://t.me/dimitrysc).
 
 ## Building from source
 ### Requirements
