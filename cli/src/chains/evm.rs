@@ -87,7 +87,7 @@ impl EvmArgs {
                 hex::encode(evm_id)
             );
             let start = Instant::now();
-            let receipt = session.prove()?;
+            let receipt = session.prove()?.receipt;
             let _ = receipt.verify(EXPLOIT_ID);
             let duration = start.elapsed();
 
